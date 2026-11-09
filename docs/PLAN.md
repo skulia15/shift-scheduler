@@ -89,7 +89,10 @@ live feedback when the planner edits cells.
 
 MTP is the system of record for time tracking, day-off requests and shift swaps. This app only
 generates and checks the roster: requests come in from MTP and the finished roster goes back to it.
-Next step: import requests/leave from an MTP export and export the roster in a format MTP accepts
-(needs a sample export / the MTP import spec).
+Built: Excel/CSV roster import (grid layout, auto-detected header, names or employee numbers, codes,
+times, areas, tasks) and Excel export (grid that re-imports, one-row-per-shift "Vaktir" sheet, rule
+check). Typical flow: Import Excel → Repair → Export Excel → MTP. Still needed for a direct MTP
+connection: a sample MTP export and MTP's roster import format or API (ask MyTimePlan).
+Sample manager sheet: `docs/samples/manager-roster.xlsx`.
 
 Out of scope for v1: logins, multiple units, staff self-service requests, pay calculation.

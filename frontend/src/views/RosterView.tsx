@@ -3,8 +3,9 @@ import { PageHead } from '../components/fields'
 import { AlertIcon, CheckIcon, CloseIcon } from '../components/icons'
 import { longDate, periodDates, WEEKDAYS, weekday } from '../dates'
 import { shiftColor } from '../shiftColors'
+import { api } from '../api'
 import { download } from '../store'
-import type { Assignment, Change, Evaluation, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
+import type { Assignment, Change, Evaluation, ImportResult, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
 
 interface Props {
   project: Project
@@ -84,20 +85,21 @@ export function RosterView({
     setRoster(shiftId ? [...rest, { staff_id: staffId, date, shift_id: shiftId, task_ids: taskIds, area_id: areaId, locked }] : rest)
   }
 
-  const exportCsv = () => {
-    const header = ['Name', ...dates.map((d) => `${WEEKDAYS[weekday(d)]} ${d}`)]
-    const rows = project.staff.map((s) => [
-      s.name,
-      ...dates.map((d) => {
-        const a = cell.get(`${s.id}|${d}`)
-        if (!a) return ''
-        const code = project.shift_types.find((t) => t.id === a.shift_id)?.code ?? a.shift_id
-        const area = a.area_id ? (areaCode.get(a.area_id) ?? a.area_id) : null
-        return [code, area, ...a.task_ids.map((t) => taskName.get(t) ?? t)].filter(Boolean).join(' ')
-      }),
-    ])
-    const csv = [header, ...rows].map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
-    download(`${project.name}.csv`, csv, 'text/csv')
+  const [importReport, setImportReport] = useState<ImportResult | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+
+  const exportExcel = async () => download(`${project.name}.xlsx`, await api.exportRoster(project, roster), '')
+
+  const importExcel = async (file: File) => {
+    setImportError(null)
+    try {
+      const result = await api.importRoster(project, file)
+      if (roster.length && !confirm(`Replace the current roster with ${result.shifts_imported} shifts from ${file.name}?`)) return
+      setRoster(result.roster)
+      setImportReport(result)
+    } catch (e) {
+      setImportError(String((e as Error).message ?? e))
+    }
   }
 
   // An empty roster breaks every coverage rule; listing them all is noise.
@@ -131,6 +133,9 @@ export function RosterView({
           )
         )}
       </PageHead>
+
+      {importError && <pre className="error-banner">{importError}</pre>}
+      {importReport && <ImportReportCard report={importReport} onClose={() => setImportReport(null)} />}
 
       <section className="kpis no-print" aria-label="Summary">
         <div className="kpi">
@@ -177,8 +182,21 @@ export function RosterView({
             <span className="muted">As of</span>
             <input type="date" value={asOf} onChange={(e) => e.target.value && setAsOf(e.target.value)} />
           </label>
-          <button className="btn" onClick={exportCsv}>
-            Export CSV
+          <label className="btn" title="Read a roster from Excel or CSV: names down the side, days across the top">
+            Import Excel
+            <input
+              type="file"
+              accept=".xlsx,.xlsm,.csv,.txt"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (f) importExcel(f)
+              }}
+            />
+          </label>
+          <button className="btn" disabled={!roster.length} onClick={exportExcel} title="Grid, one row per shift (for MTP/payroll), and the rule check">
+            Export Excel
           </button>
           <button className="btn" onClick={() => window.print()}>
             Print
@@ -733,6 +751,59 @@ function ChangesCard({ project, changes }: { project: Project; changes: Change[]
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+/** What an Excel/CSV import read, and what it could not place. */
+function ImportReportCard({ report, onClose }: { report: ImportResult; onClose: () => void }) {
+  const unknown = Object.entries(report.unknown_codes)
+  const clean = !report.unmatched_names.length && !unknown.length && !report.outside_period && !report.warnings.length
+  return (
+    <section className="card no-print">
+      <div className="card-head">
+        <div>
+          <h2>Imported from “{report.sheet}”</h2>
+          <p className="hint">
+            {report.shifts_imported} shifts for {report.people_found} people, checked against every rule below. Next: press <b>Repair roster</b> to
+            fill in tasks and hallways and fix rule errors with the fewest shift changes.
+          </p>
+        </div>
+        <button type="button" className="icon-btn close" aria-label="Close" onClick={onClose}>
+          <CloseIcon size={18} />
+        </button>
+      </div>
+      {clean && <p className="empty">Everything in the file was recognised.</p>}
+      {report.unmatched_names.length > 0 && (
+        <div className="alert warning">
+          <AlertIcon />
+          <span>
+            <b>People not found in Staff</b> (their shifts were skipped): {report.unmatched_names.join(', ')}. Add them under Setup, or give them the
+            same employee number as the file.
+          </span>
+        </div>
+      )}
+      {unknown.length > 0 && (
+        <div className="alert warning">
+          <AlertIcon />
+          <span>
+            <b>Codes not recognised:</b> {unknown.map(([code, n]) => `“${code}” ×${n}`).join(', ')}. Add a shift type, area or task with that code, or
+            fix the file.
+          </span>
+        </div>
+      )}
+      {report.outside_period > 0 && (
+        <div className="alert warning">
+          <AlertIcon />
+          <span>{report.outside_period} shifts fall outside the planning period and were left out.</span>
+        </div>
+      )}
+      {report.warnings.map((w, i) => (
+        <div key={i} className="alert warning">
+          <AlertIcon />
+          <span>{w}</span>
+        </div>
+      ))}
     </section>
   )
 }

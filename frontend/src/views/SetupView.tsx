@@ -307,6 +307,7 @@ export function SetupView({ project: p, setProject }: Props) {
                         allowed_shift_ids: null,
                         target_hours_override: null,
                         competence_ids: [],
+                        employee_number: null,
                       },
                     ],
                   })
@@ -321,6 +322,7 @@ export function SetupView({ project: p, setProject }: Props) {
                 <thead>
                   <tr>
                     <th>Name</th>
+                    <th title="Starfsmannanúmer — matches people in Excel / MTP files">No.</th>
                     <th>Group</th>
                     <th>Employment</th>
                     <th>May work</th>
@@ -337,6 +339,14 @@ export function SetupView({ project: p, setProject }: Props) {
                           <span className="avatar">{s.name.charAt(0)}</span>
                           <TextField value={s.name} onChange={(name) => set({ staff: patchAt(p.staff, i, { name }) })} />
                         </span>
+                      </td>
+                      <td>
+                        <input
+                          aria-label={`${s.name} employee number`}
+                          style={{ width: 72 }}
+                          value={s.employee_number ?? ''}
+                          onChange={(e) => set({ staff: patchAt(p.staff, i, { employee_number: e.target.value || null }) })}
+                        />
                       </td>
                       <td>
                         <Checks values={s.group_ids} options={groupOptions} onChange={(group_ids) => set({ staff: patchAt(p.staff, i, { group_ids }) })} />

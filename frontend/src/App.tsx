@@ -31,7 +31,7 @@ export default function App() {
             history: stored.history ?? [],
             ledger: stored.ledger ?? [],
             competence_demand: stored.competence_demand ?? [],
-            staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [] })),
+            staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [], employee_number: s.employee_number ?? null })),
             tasks: stored.tasks.map((t) => ({ ...t, competence_id: t.competence_id ?? null })),
             rules: { ...defaults.rules, ...stored.rules },
             weights: { ...defaults.weights, ...stored.weights },

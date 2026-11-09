@@ -20,8 +20,8 @@ export function usePersisted<T>(key: string, initial: T): [T, (value: T | ((prev
   return [value, setValue]
 }
 
-export function download(filename: string, content: string, type: string) {
-  const url = URL.createObjectURL(new Blob([content], { type }))
+export function download(filename: string, content: string | Blob, type: string) {
+  const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type }))
   const a = document.createElement('a')
   a.href = url
   a.download = filename

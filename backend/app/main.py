@@ -2,7 +2,8 @@
 
 from datetime import date
 
-from fastapi import FastAPI
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
@@ -11,6 +12,7 @@ from .periods import next_period
 from .models import Agreement, Evaluation, Project, PublicHoliday, RepairRequest, SolveResult, ValidateRequest
 from .sample import sample_project
 from .solver import repair, solve
+from .spreadsheet import ImportResult, export_roster, import_roster
 from .validator import evaluate
 
 app = FastAPI(title="Shift Scheduler")
@@ -36,6 +38,25 @@ async def post_solve(project: Project) -> SolveResult:
 @app.post("/api/repair")
 async def post_repair(body: RepairRequest) -> SolveResult:
     return await run_in_threadpool(repair, body.project, body.roster, body.today)
+
+
+@app.post("/api/import/roster")
+async def post_import_roster(file: UploadFile = File(...), project: str = Form(...)) -> ImportResult:
+    content = await file.read()
+    try:
+        return import_roster(Project.model_validate_json(project), file.filename or "", content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.post("/api/export/roster.xlsx")
+def post_export_roster(body: ValidateRequest) -> Response:
+    data = export_roster(body.project, body.roster)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="vaktaplan.xlsx"'},
+    )
 
 
 @app.post("/api/next-period")

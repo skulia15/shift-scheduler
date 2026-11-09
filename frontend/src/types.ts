@@ -25,6 +25,7 @@ export interface Staff {
   allowed_shift_ids: string[] | null
   target_hours_override: number | null
   competence_ids: string[]
+  employee_number: string | null
 }
 
 export interface Competence {
@@ -267,4 +268,15 @@ export interface SolveResult extends Evaluation {
   objective: number | null
   solve_seconds: number
   changes: Change[]
+}
+
+export interface ImportResult {
+  roster: Assignment[]
+  sheet: string
+  people_found: number
+  shifts_imported: number
+  unmatched_names: string[]
+  unknown_codes: Record<string, number>
+  outside_period: number
+  warnings: string[]
 }

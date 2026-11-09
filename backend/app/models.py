@@ -58,6 +58,7 @@ class Staff(BaseModel):
     allowed_shift_ids: list[str] | None = Field(None, description="None = any shift type")
     target_hours_override: float | None = Field(None, description="Hours for the whole period")
     competence_ids: list[str] = Field(default_factory=list, description="e.g. medication rights, Icelandic")
+    employee_number: str | None = Field(None, description="Starfsmannanúmer, for matching to MTP / payroll files")
 
 
 class Competence(BaseModel):

@@ -30,6 +30,7 @@ from app.models import (
 )
 from app.sample import sample_project
 from app.solver import repair, solve
+from app.spreadsheet import export_roster, import_roster
 from app.validator import evaluate
 
 START = date(2026, 11, 30)  # a Monday
@@ -346,3 +347,50 @@ def test_repair_keeps_locked_shifts_and_the_past():
     assert {(a.staff_id, a.date, a.shift_id) for a in roster if a.date < today} <= kept
     assert all(c.date >= today for c in result.changes)
     assert errors(result) == []
+
+
+def _key(roster):
+    return {(a.staff_id, a.date, a.shift_id, a.area_id, tuple(sorted(a.task_ids))) for a in roster}
+
+
+def test_excel_export_imports_back_unchanged():
+    project = sample_project()
+    project.solve_seconds = 5
+    roster = solve(project).roster
+    result = import_roster(project, "vaktaplan.xlsx", export_roster(project, roster))
+    assert result.unmatched_names == [] and result.unknown_codes == {}
+    assert _key(result.roster) == _key(roster)
+
+
+def test_manager_style_sheet_with_day_numbers_first_names_and_times():
+    from io import BytesIO
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Vaktaplan desember"])
+    ws.append([])
+    ws.append(["", "Nafn", "Mán 30", "Þri 1", "Mið 2", "Fim 3", "Fös 4", "Lau 5"])
+    ws.append(["", "S0", "d", "16-24", "frí", "Z", "", "N"])
+    ws.append(["", "Gestur", "D", "D", "", "", "", ""])
+    ws.append(["", "Samtals", 3, 3, 2, 2, 2, 2])
+    buf = BytesIO()
+    wb.save(buf)
+    result = import_roster(small_project(), "manager.xlsx", buf.getvalue())
+    got = {(a.date, a.shift_id) for a in result.roster}
+    assert got == {(START, "D"), (START + timedelta(days=1), "E"), (START + timedelta(days=5), "N")}
+    assert result.unmatched_names == ["Gestur"]
+    assert result.unknown_codes == {"Z": 1}
+
+
+def test_semicolon_csv_with_day_month_headers():
+    csv_text = "Starfsmaður;30.11.;1.12.;2.12.;3.12.;4.12.\nS1;N;;D;D;E\n"
+    result = import_roster(small_project(), "roster.csv", csv_text.encode())
+    assert {(a.date, a.shift_id) for a in result.roster} == {
+        (START, "N"),
+        (START + timedelta(days=2), "D"),
+        (START + timedelta(days=3), "D"),
+        (START + timedelta(days=4), "E"),
+    }
+    assert all(a.staff_id == "s1" for a in result.roster)
