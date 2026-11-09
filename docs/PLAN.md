@@ -85,4 +85,11 @@ live feedback when the planner edits cells.
 4. Frontend: setup, demand, leave, rules editors; save/load/export.
 5. Polish: infeasibility explanations, print view.
 
+## MTP (myTimePlan)
+
+MTP is the system of record for time tracking, day-off requests and shift swaps. This app only
+generates and checks the roster: requests come in from MTP and the finished roster goes back to it.
+Next step: import requests/leave from an MTP export and export the roster in a format MTP accepts
+(needs a sample export / the MTP import spec).
+
 Out of scope for v1: logins, multiple units, staff self-service requests, pay calculation.

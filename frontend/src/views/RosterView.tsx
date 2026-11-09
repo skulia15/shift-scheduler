@@ -67,9 +67,10 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
     download(`${project.name}.csv`, csv, 'text/csv')
   }
 
-  const violations = (evaluation?.violations ?? []).filter((v) => filter === 'all' || v.severity === filter)
-  const errorCount = evaluation?.violations.filter((v) => v.severity === 'error').length ?? 0
-  const warningCount = (evaluation?.violations.length ?? 0) - errorCount
+  // An empty roster breaks every coverage rule; listing them all is noise.
+  const violations = roster.length ? (evaluation?.violations ?? []).filter((v) => filter === 'all' || v.severity === filter) : []
+  const errorCount = roster.length ? (evaluation?.violations.filter((v) => v.severity === 'error').length ?? 0) : 0
+  const warningCount = roster.length ? (evaluation?.violations.length ?? 0) - errorCount : 0
 
   return (
     <div>
@@ -130,6 +131,8 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
                           return (
                             <td
                               key={d}
+                              data-staff={s.id}
+                              data-date={d}
                               className={`cell ${dayClass(d, holidays)} ${severity} leave-${leaveKind.get(key) ?? 'none'}`}
                               style={t !== undefined ? { background: SHIFT_COLORS[t % SHIFT_COLORS.length] } : undefined}
                               title={[
