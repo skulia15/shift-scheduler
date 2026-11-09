@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
+from datetime import date
 
 from ortools.sat.python import cp_model
 
 from .context import Context, build_context
 from .models import (
     Assignment,
+    Change,
     AvoidTaskRepeatRule,
     DiverseShiftsRule,
     FixedAreaRule,
@@ -28,12 +31,32 @@ OCCURRENCE = 60
 ROTATION_SCALE = 10
 
 
+@dataclass
+class Repair:
+    """A published roster to change as little as possible. Days before `today` and locked shifts are fixed."""
+
+    base: dict[tuple[int, int], Assignment]  # (staff, day) -> shift
+    today: int  # day index; may lie before or after the period
+
+    def notice(self, day: int) -> int:
+        return day - self.today
+
+    def cost(self, day: int, w) -> int:
+        notice = self.notice(day)
+        return w.change_day if notice <= 1 else w.change_week if notice <= 7 else w.change
+
+    @staticmethod
+    def fee_percent(notice: int) -> float:
+        return 2.0 if notice <= 1 else 1.3 if notice <= 7 else 0.0
+
+
 class _Model:
-    def __init__(self, ctx: Context, relax_coverage: bool):
+    def __init__(self, ctx: Context, relax_coverage: bool, repair: Repair | None = None):
         self.ctx = ctx
         self.m = cp_model.CpModel()
         self.objective: list[cp_model.LinearExprT] = []
         self.relax = relax_coverage
+        self.repair = repair
         self.work: dict[tuple[int, int, int], cp_model.IntVar] = {}
         self.task: dict[tuple[int, int, int, str], cp_model.IntVar] = {}
         self.day_work: dict[tuple[int, int], cp_model.LinearExprT] = {}
@@ -233,6 +256,8 @@ class _Model:
             m.add_max_equality(worst, overtimes)
             self.penalise(worst, w.overtime_spread)
 
+        if self.repair:
+            self._repair_costs()
         self._custom_rules()
         m.minimize(sum(self.objective))
 
@@ -241,6 +266,36 @@ class _Model:
         expr = self.day_work[s, d]
         if not isinstance(expr, int):
             self.m.add(expr == 0).only_enforce_if(literal)
+
+    def _repair_costs(self) -> None:
+        """Keep the published roster: past days and locked shifts are fixed; every other change costs
+        more the shorter the notice."""
+        ctx, m, w, rep = self.ctx, self.m, self.ctx.project.weights, self.repair
+        for (s, d, t), var in self.work.items():
+            base = rep.base.get((s, d))
+            same = base is not None and ctx.shift_index.get(base.shift_id) == t
+            if d < rep.today or (base is not None and base.locked):
+                m.add(var == int(same))
+                continue
+            if same:
+                self.penalise(1 - var, rep.cost(d, w) * OCCURRENCE)
+                if base.area_id and (s, d, t, base.area_id) in self.area:
+                    self.penalise(var - self.area[s, d, t, base.area_id], w.change_detail * OCCURRENCE)
+                for k in base.task_ids:
+                    if (s, d, t, k) in self.task:
+                        self.penalise(var - self.task[s, d, t, k], w.change_detail * OCCURRENCE)
+            else:
+                self.penalise(var, rep.cost(d, w) * OCCURRENCE)
+        # Fixed shifts keep their area and tasks too.
+        for (s, d), base in rep.base.items():
+            t = ctx.shift_index.get(base.shift_id)
+            if t is None or not (d < rep.today or base.locked):
+                continue
+            if base.area_id and (s, d, t, base.area_id) in self.area:
+                m.add(self.area[s, d, t, base.area_id] == self.work[s, d, t])
+            for k in base.task_ids:
+                if (s, d, t, k) in self.task:
+                    m.add(self.task[s, d, t, k] == self.work[s, d, t])
 
     def _fair_share(self, current: dict[int, cp_model.LinearExprT], prior_of, weight: int, max_now: int) -> None:
         """Per staff group, penalise the highest (prior + current) load per 100% FTE."""
@@ -414,14 +469,15 @@ class _Model:
                 shift_id=ctx.shifts[t].id,
                 task_ids=tasks.get((s, d, t), []),
                 area_id=areas.get((s, d, t)),
+                locked=bool(self.repair and (b := self.repair.base.get((s, d))) and b.locked and b.shift_id == ctx.shifts[t].id),
             )
             for (s, d, t), var in sorted(self.work.items())
             if solver.value(var)
         ]
 
 
-def _run(ctx: Context, relax: bool, seconds: float) -> tuple[int, _Model, cp_model.CpSolver]:
-    model = _Model(ctx, relax_coverage=relax)
+def _run(ctx: Context, relax: bool, seconds: float, repair: Repair | None = None) -> tuple[int, _Model, cp_model.CpSolver]:
+    model = _Model(ctx, relax_coverage=relax, repair=repair)
     model.build()
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = seconds
@@ -431,15 +487,49 @@ def _run(ctx: Context, relax: bool, seconds: float) -> tuple[int, _Model, cp_mod
 
 
 def solve(project: Project) -> SolveResult:
+    return _solve(project, None)
+
+
+def repair(project: Project, roster: list[Assignment], today: date) -> SolveResult:
+    """Fix the published roster's problems with as few, as late-as-possible-noticed changes as possible."""
+    ctx = build_context(project)
+    base = {
+        (ctx.staff_index[a.staff_id], ctx.day_of[a.date]): a
+        for a in roster
+        if a.staff_id in ctx.staff_index and a.date in ctx.day_of
+    }
+    rep = Repair(base=base, today=(today - ctx.dates[0]).days)
+    result = _solve(project, rep)
+    if result.status == "failed":
+        result.message = "No roster keeps every locked shift within the hard rules. Unlock some shifts and repair again."
+        return result
+    before = {(a.staff_id, a.date): a.shift_id for a in roster}
+    after = {(a.staff_id, a.date): a.shift_id for a in result.roster}
+    changes = []
+    for key in sorted(set(before) | set(after), key=lambda k: (k[1], k[0])):
+        if before.get(key) != after.get(key):
+            notice = rep.notice(ctx.day_of[key[1]])
+            changes.append(
+                Change(
+                    staff_id=key[0], date=key[1], before=before.get(key), after=after.get(key), notice_days=notice, fee_percent=Repair.fee_percent(notice)
+                )
+            )
+    result.changes = changes
+    n = len(changes)
+    result.message = "No changes needed." if n == 0 else f"Repaired with {n} change{'s' if n > 1 else ''}."
+    return result
+
+
+def _solve(project: Project, rep: Repair | None) -> SolveResult:
     started = time.monotonic()
     ctx = build_context(project)
-    status, model, solver = _run(ctx, relax=False, seconds=project.solve_seconds)
+    status, model, solver = _run(ctx, relax=False, seconds=project.solve_seconds, repair=rep)
     label, message = "optimal", "Optimal roster found."
     if status == cp_model.FEASIBLE:
         label, message = "feasible", "Good roster found within the time limit (may not be optimal)."
     elif status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         # Hard coverage cannot be met (or not proven in time): plan with gaps instead of nothing.
-        status, model, solver = _run(ctx, relax=True, seconds=project.solve_seconds)
+        status, model, solver = _run(ctx, relax=True, seconds=project.solve_seconds, repair=rep)
         label = "relaxed"
         message = "Demand cannot be fully covered under the rules; roster shows the gaps as coverage errors."
         if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):

@@ -8,11 +8,11 @@ interface Props {
   setProject: (p: Project) => void
 }
 
-type Kind = 'request' | 'granted' | 'holiday'
-const CYCLE: (Kind | null)[] = [null, 'request', 'granted', 'holiday']
-const LABEL: Record<Kind, string> = { request: 'R', granted: 'G', holiday: 'H' }
-const NAME: Record<Kind, string> = { request: 'Request', granted: 'Granted', holiday: 'Holiday' }
-const CHIP: Record<Kind, string> = { request: 'chip request', granted: 'chip granted', holiday: 'chip' }
+type Kind = 'request' | 'granted' | 'holiday' | 'sick'
+const CYCLE: (Kind | null)[] = [null, 'request', 'granted', 'holiday', 'sick']
+const LABEL: Record<Kind, string> = { request: 'R', granted: 'G', holiday: 'H', sick: 'S' }
+const NAME: Record<Kind, string> = { request: 'Request', granted: 'Granted', holiday: 'Holiday', sick: 'Sick' }
+const CHIP: Record<Kind, string> = { request: 'chip request', granted: 'chip granted', holiday: 'chip', sick: 'chip sick' }
 
 interface DayLeave {
   kind: Kind
@@ -20,7 +20,7 @@ interface DayLeave {
 }
 
 function kindOf(lv: Leave): Kind {
-  return lv.kind === 'holiday' ? 'holiday' : lv.granted ? 'granted' : 'request'
+  return lv.kind === 'request' ? (lv.granted ? 'granted' : 'request') : lv.kind
 }
 
 function expand(leave: Leave[]): Map<string, DayLeave> {
@@ -42,7 +42,7 @@ function compress(map: Map<string, DayLeave>): Leave[] {
     if (last && last.staff_id === staff_id && kindOf(last) === kind && last.note === note && periodDates(last.end, 2)[1] === date) {
       last.end = date
     } else {
-      out.push({ staff_id, start: date, end: date, kind: kind === 'holiday' ? 'holiday' : 'request', granted: kind === 'granted', note })
+      out.push({ staff_id, start: date, end: date, kind: kind === 'granted' ? 'request' : kind, granted: kind === 'granted', note })
     }
   }
   return out
@@ -76,6 +76,8 @@ export function LeaveView({ project: p, setProject }: Props) {
           <span className="chip granted">G Granted</span>
           <ArrowIcon />
           <span className="chip">H Holiday</span>
+          <ArrowIcon />
+          <span className="chip sick">S Sick</span>
         </div>
       </PageHead>
 

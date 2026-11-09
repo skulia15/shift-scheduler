@@ -85,7 +85,7 @@ export interface Leave {
   staff_id: string
   start: ISODate
   end: ISODate
-  kind: 'holiday' | 'request'
+  kind: 'holiday' | 'request' | 'sick'
   granted: boolean
   note: string
 }
@@ -140,6 +140,10 @@ export interface Weights {
   short_rest: number
   short_rest_excess: number
   days_off: number
+  change: number
+  change_week: number
+  change_day: number
+  change_detail: number
   weekend_fairness: number
   holiday_fairness: number
   weekend_excess: number
@@ -203,6 +207,16 @@ export interface Assignment {
   shift_id: string
   task_ids: string[]
   area_id: string | null
+  locked?: boolean
+}
+
+export interface Change {
+  staff_id: string
+  date: ISODate
+  before: string | null
+  after: string | null
+  notice_days: number
+  fee_percent: number
 }
 
 export interface Violation {
@@ -252,4 +266,5 @@ export interface SolveResult extends Evaluation {
   roster: Assignment[]
   objective: number | null
   solve_seconds: number
+  changes: Change[]
 }

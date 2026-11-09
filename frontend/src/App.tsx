@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { CalendarIcon, SparkleIcon } from './components/icons'
 import { download, usePersisted } from './store'
-import type { Assignment, Evaluation, Project, SolveResult } from './types'
+import type { Assignment, Change, Evaluation, Project, SolveResult } from './types'
 import { DemandView } from './views/DemandView'
 import { LeaveView } from './views/LeaveView'
 import { RosterView } from './views/RosterView'
@@ -42,7 +42,10 @@ export default function App() {
   const [roster, setRoster] = usePersisted<Assignment[]>('roster', [])
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [solveInfo, setSolveInfo] = useState<Pick<SolveResult, 'status' | 'message' | 'solve_seconds'> | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'generate' | 'repair' | null>(null)
+  const [changes, setChanges] = useState<Change[] | null>(null)
+  // "Now" for repair: earlier days are history, and notice (change fee) counts from here.
+  const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -66,19 +69,23 @@ export default function App() {
 
   if (!project) return <div className="loading">{error ?? 'Loading…'}</div>
 
-  const generate = async () => {
-    setBusy(true)
+  const run = async (mode: 'generate' | 'repair') => {
+    setBusy(mode)
     setError(null)
     try {
-      const result = await api.solve(project)
-      setRoster(result.roster)
+      const result = mode === 'generate' ? await api.solve(project) : await api.repair(project, roster, asOf)
+      if (result.status !== 'failed') setRoster(result.roster)
       setEvaluation(result)
       setSolveInfo(result)
+      setChanges(mode === 'repair' ? result.changes : null)
     } catch (e) {
       setError(String((e as Error).message ?? e))
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
+  }
+  const startOver = () => {
+    if (confirm('Start over? This regenerates the whole roster and ignores the current one, including locks.')) run('generate')
   }
 
   const importJson = (file: File) =>
@@ -94,6 +101,7 @@ export default function App() {
     setProject(await api.nextPeriod(project, roster))
     setRoster([])
     setSolveInfo(null)
+    setChanges(null)
   }
 
   const resetToSample = async () => {
@@ -135,10 +143,17 @@ export default function App() {
             <button className="btn on-plum" onClick={resetToSample}>
               Demo
             </button>
-            <button className="btn lime" disabled={busy} onClick={generate}>
-              <SparkleIcon />
-              {busy ? `Generating… (≤${project.solve_seconds}s)` : 'Generate roster'}
-            </button>
+            {roster.length ? (
+              <button className="btn lime" disabled={!!busy} onClick={() => run('repair')} title="Fix problems with as few changes as possible">
+                <SparkleIcon />
+                {busy === 'repair' ? 'Repairing…' : 'Repair roster'}
+              </button>
+            ) : (
+              <button className="btn lime" disabled={!!busy} onClick={() => run('generate')}>
+                <SparkleIcon />
+                {busy ? `Generating… (≤${project.solve_seconds}s)` : 'Generate roster'}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -151,7 +166,14 @@ export default function App() {
             setRoster={setRoster}
             evaluation={evaluation}
             solveInfo={solveInfo}
-            busy={busy}
+            busy={!!busy}
+            changes={changes}
+            asOf={asOf}
+            setAsOf={setAsOf}
+            onStartOver={startOver}
+            onMarkSick={(staffId, date) =>
+              setProject({ ...project, leave: [...project.leave, { staff_id: staffId, start: date, end: date, kind: 'sick', granted: false, note: '' }] })
+            }
             onNextPeriod={startNextPeriod}
             onLedgerChange={(ledger) => setProject({ ...project, ledger })}
           />

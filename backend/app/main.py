@@ -8,9 +8,9 @@ from starlette.concurrency import run_in_threadpool
 
 from .holidays import holidays_between
 from .periods import next_period
-from .models import Agreement, Evaluation, Project, PublicHoliday, SolveResult, ValidateRequest
+from .models import Agreement, Evaluation, Project, PublicHoliday, RepairRequest, SolveResult, ValidateRequest
 from .sample import sample_project
-from .solver import solve
+from .solver import repair, solve
 from .validator import evaluate
 
 app = FastAPI(title="Shift Scheduler")
@@ -31,6 +31,11 @@ def get_holidays(start: date, days: int, agreement: Agreement = "sfv") -> list[P
 async def post_solve(project: Project) -> SolveResult:
     # CP-SAT blocks for up to `solve_seconds`; keep the event loop free.
     return await run_in_threadpool(solve, project)
+
+
+@app.post("/api/repair")
+async def post_repair(body: RepairRequest) -> SolveResult:
+    return await run_in_threadpool(repair, body.project, body.roster, body.today)
 
 
 @app.post("/api/next-period")

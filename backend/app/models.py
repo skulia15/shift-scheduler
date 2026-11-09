@@ -127,13 +127,13 @@ class AreaDemand(BaseModel):
 
 
 class Leave(BaseModel):
-    """`holiday` is reserved leave and is never scheduled over.
-    A `request` is a day-off wish; once `granted` it is binding."""
+    """`holiday` is reserved leave and is never scheduled over; `sick` likewise (both are paid absence
+    and lower the contract target). A `request` is a day-off wish; once `granted` it is binding."""
 
     staff_id: str
     start: date
     end: date
-    kind: Literal["holiday", "request"]
+    kind: Literal["holiday", "request", "sick"]
     granted: bool = False
     note: str = ""
 
@@ -217,6 +217,10 @@ class Weights(BaseModel):
     short_rest: int = 15
     short_rest_excess: int = 60  # each short rest beyond the weekly allowance
     days_off: int = 20  # a week without the expected (consecutive) days off
+    change: int = 100  # repair: each changed shift with more than a week's notice
+    change_week: int = 200  # 2–7 days' notice (breytingargjald 1.3%)
+    change_day: int = 400  # under ~24 h notice (breytingargjald 2%)
+    change_detail: int = 5  # repair: a kept shift's area or task changed
     weekend_fairness: int = 5  # per weekend on the most-loaded person's running total (per 100% FTE)
     holiday_fairness: int = 20  # same for holiday shifts; stórhátíð shifts count double
     weekend_excess: int = 10
@@ -391,6 +395,7 @@ class Assignment(BaseModel):
     shift_id: str
     task_ids: list[str] = []
     area_id: str | None = None
+    locked: bool = Field(False, description="Repair never moves a locked shift")
 
 
 class Violation(BaseModel):
@@ -439,12 +444,28 @@ class ValidateRequest(BaseModel):
     roster: list[Assignment]
 
 
+class RepairRequest(BaseModel):
+    project: Project
+    roster: list[Assignment]
+    today: DateT = Field(description="Days before this are history and are never changed")
+
+
+class Change(BaseModel):
+    staff_id: str
+    date: DateT
+    before: str | None
+    after: str | None
+    notice_days: int
+    fee_percent: float = Field(description="Breytingargjald as % of monthly salary (2% < 24 h, 1.3% < 1 week)")
+
+
 class SolveResult(Evaluation):
     status: Literal["optimal", "feasible", "relaxed", "failed"]
     message: str
     roster: list[Assignment]
     objective: float | None = None
     solve_seconds: float
+    changes: list[Change] = []
 
 
 Project.model_rebuild()

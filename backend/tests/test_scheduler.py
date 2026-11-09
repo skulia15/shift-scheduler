@@ -29,7 +29,7 @@ from app.models import (
     StaffGroup,
 )
 from app.sample import sample_project
-from app.solver import solve
+from app.solver import repair, solve
 from app.validator import evaluate
 
 START = date(2026, 11, 30)  # a Monday
@@ -309,3 +309,40 @@ def test_holiday_shifts_go_to_whoever_has_carried_fewer_before():
     )
     result = solve(project)
     assert not any(a.staff_id == "s0" and a.date == holiday for a in result.roster)
+
+
+def test_repair_of_a_valid_roster_changes_nothing():
+    project = small_project()
+    roster = solve(project).roster
+    result = repair(project, roster, today=START)
+    assert result.changes == []
+    assert {(a.staff_id, a.date, a.shift_id) for a in result.roster} == {(a.staff_id, a.date, a.shift_id) for a in roster}
+
+
+def test_sick_call_is_covered_with_few_changes_and_fee_noted():
+    project = small_project()
+    roster = solve(project).roster
+    sick = next(a for a in roster if a.date == START + timedelta(days=5))
+    project = project.model_copy(update={"leave": [Leave(staff_id=sick.staff_id, start=sick.date, end=sick.date, kind="sick")]})
+    result = repair(project, roster, today=START + timedelta(days=4))
+    assert errors(result) == []
+    assert 1 <= len(result.changes) <= 4
+    dropped = next(c for c in result.changes if c.staff_id == sick.staff_id and c.date == sick.date)
+    assert dropped.after is None
+    assert dropped.fee_percent == 2.0  # one day's notice
+
+
+def test_repair_keeps_locked_shifts_and_the_past():
+    project = small_project()
+    roster = solve(project).roster
+    today = START + timedelta(days=7)
+    locked = next(a for a in roster if a.date == START + timedelta(days=10))
+    roster = [a.model_copy(update={"locked": True}) if a is locked else a for a in roster]
+    # Breaking a later day forces changes; the past and the locked shift must survive them.
+    broken = [a for a in roster if not (a.date == START + timedelta(days=11) and a.shift_id == "D")]
+    result = repair(project, broken, today=today)
+    kept = {(a.staff_id, a.date, a.shift_id) for a in result.roster}
+    assert (locked.staff_id, locked.date, locked.shift_id) in kept
+    assert {(a.staff_id, a.date, a.shift_id) for a in roster if a.date < today} <= kept
+    assert all(c.date >= today for c in result.changes)
+    assert errors(result) == []

@@ -202,9 +202,9 @@ def build_context(project: Project) -> Context:
             if day not in ctx.day_of:
                 continue
             key = (s, ctx.day_of[day])
-            if lv.kind == "holiday":
+            if lv.kind in ("holiday", "sick"):
                 holiday.add(key)
-            if lv.kind == "holiday" or lv.granted:
+            if lv.kind in ("holiday", "sick") or lv.granted:
                 ctx.blocked.add(key)
             else:
                 ctx.request.add(key)

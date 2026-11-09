@@ -4,7 +4,7 @@ import { AlertIcon, CheckIcon, CloseIcon } from '../components/icons'
 import { longDate, periodDates, WEEKDAYS, weekday } from '../dates'
 import { shiftColor } from '../shiftColors'
 import { download } from '../store'
-import type { Assignment, Evaluation, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
+import type { Assignment, Change, Evaluation, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
 
 interface Props {
   project: Project
@@ -13,11 +13,31 @@ interface Props {
   evaluation: Evaluation | null
   solveInfo: Pick<SolveResult, 'status' | 'message' | 'solve_seconds'> | null
   busy: boolean
+  changes: Change[] | null
+  asOf: ISODate
+  setAsOf: (d: ISODate) => void
+  onStartOver: () => void
+  onMarkSick: (staffId: string, date: ISODate) => void
   onNextPeriod: () => void
   onLedgerChange: (ledger: LedgerEntry[]) => void
 }
 
-export function RosterView({ project, roster, setRoster, evaluation, solveInfo, busy, onNextPeriod, onLedgerChange }: Props) {
+export function RosterView({
+  project,
+  roster,
+  setRoster,
+  evaluation,
+  solveInfo,
+  busy,
+  changes,
+  asOf,
+  setAsOf,
+  onStartOver,
+  onMarkSick,
+  onNextPeriod,
+  onLedgerChange,
+}: Props) {
+  const changed = useMemo(() => new Set((changes ?? []).map((c) => `${c.staff_id}|${c.date}`)), [changes])
   const dates = useMemo(() => periodDates(project.period.start, project.period.days), [project.period])
   // The previous roster's last week, shown greyed for context (the solver respects it too).
   const pastDates = useMemo(
@@ -53,15 +73,15 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
     const map = new Map<string, string>()
     for (const lv of project.leave) {
       for (const d of periodDates(lv.start, daysBetween(lv.start, lv.end) + 1)) {
-        map.set(`${lv.staff_id}|${d}`, lv.kind === 'holiday' ? 'holiday' : lv.granted ? 'granted' : 'request')
+        map.set(`${lv.staff_id}|${d}`, lv.kind === 'request' ? (lv.granted ? 'granted' : 'request') : lv.kind)
       }
     }
     return map
   }, [project.leave])
 
-  const setCell = (staffId: string, date: ISODate, shiftId: string | null, taskIds: string[], areaId: string | null) => {
+  const setCell = (staffId: string, date: ISODate, shiftId: string | null, taskIds: string[], areaId: string | null, locked: boolean) => {
     const rest = roster.filter((a) => !(a.staff_id === staffId && a.date === date))
-    setRoster(shiftId ? [...rest, { staff_id: staffId, date, shift_id: shiftId, task_ids: taskIds, area_id: areaId }] : rest)
+    setRoster(shiftId ? [...rest, { staff_id: staffId, date, shift_id: shiftId, task_ids: taskIds, area_id: areaId, locked }] : rest)
   }
 
   const exportCsv = () => {
@@ -100,11 +120,13 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           solveInfo && (
             <div className={`status-pill ${solveInfo.status}`}>
               {solveInfo.status === 'optimal' || solveInfo.status === 'feasible' ? <CheckIcon /> : <AlertIcon />}
-              {solveInfo.status === 'optimal'
-                ? `Optimal roster found in ${solveInfo.solve_seconds} s`
-                : solveInfo.status === 'feasible'
-                  ? `Good roster found in ${solveInfo.solve_seconds} s`
-                  : solveInfo.message}
+              {changes !== null && solveInfo.status !== 'failed'
+                ? `${solveInfo.message} (${solveInfo.solve_seconds} s)`
+                : solveInfo.status === 'optimal'
+                  ? `Optimal roster found in ${solveInfo.solve_seconds} s`
+                  : solveInfo.status === 'feasible'
+                    ? `Good roster found in ${solveInfo.solve_seconds} s`
+                    : solveInfo.message}
             </div>
           )
         )}
@@ -149,7 +171,12 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           <span className="chip">F Holiday</span>
           <span className="chip request">Day-off request</span>
           <span className="chip granted">Granted</span>
+          <span className="chip sick">S Sick</span>
           <span className="spacer" />
+          <label className="row" title="Earlier days are history; notice for change fees counts from here">
+            <span className="muted">As of</span>
+            <input type="date" value={asOf} onChange={(e) => e.target.value && setAsOf(e.target.value)} />
+          </label>
           <button className="btn" onClick={exportCsv}>
             Export CSV
           </button>
@@ -158,6 +185,9 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           </button>
           <button className="btn ghost" onClick={() => confirm('Clear the whole roster?') && setRoster([])}>
             Clear
+          </button>
+          <button className="btn ghost" disabled={!roster.length || busy} onClick={onStartOver}>
+            Start over
           </button>
           <button className="btn plum" disabled={!roster.length} onClick={onNextPeriod}>
             Start next period →
@@ -235,7 +265,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                                   type="button"
                                   data-staff={s.id}
                                   data-date={d}
-                                  className={`shift-cell ${!a && leave ? `leave-${leave}` : ''} ${severity}`}
+                                  className={`shift-cell ${leave ? `leave-${leave}` : ''} ${severity} ${a?.locked ? 'locked' : ''} ${changed.has(key) ? 'changed' : ''}`}
                                   style={color ? { background: color.bg, color: color.fg } : undefined}
                                   title={[
                                     leave && `Leave: ${leave}`,
@@ -253,6 +283,8 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                                     </>
                                   ) : leave === 'holiday' ? (
                                     'F'
+                                  ) : leave === 'sick' ? (
+                                    'S'
                                   ) : null}
                                 </button>
                               </td>
@@ -317,6 +349,8 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
         </div>
       </section>
 
+      {changes && changes.length > 0 && <ChangesCard project={project} changes={changes} />}
+
       <FairnessCard project={project} evaluation={evaluation} onLedgerChange={onLedgerChange} />
 
       <section className="card no-print">
@@ -357,8 +391,12 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           staffId={editing.staffId}
           date={editing.date}
           violations={cellViolations.get(`${editing.staffId}|${editing.date}`) ?? []}
-          onSave={(shiftId, taskIds, areaId) => {
-            setCell(editing.staffId, editing.date, shiftId, taskIds, areaId)
+          onSave={(shiftId, taskIds, areaId, locked) => {
+            setCell(editing.staffId, editing.date, shiftId, taskIds, areaId, locked)
+            setEditing(null)
+          }}
+          onMarkSick={() => {
+            onMarkSick(editing.staffId, editing.date)
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
@@ -419,6 +457,7 @@ function CellEditor({
   date,
   violations,
   onSave,
+  onMarkSick,
   onClose,
 }: {
   project: Project
@@ -426,9 +465,11 @@ function CellEditor({
   staffId: string
   date: ISODate
   violations: Violation[]
-  onSave: (shiftId: string | null, taskIds: string[], areaId: string | null) => void
+  onSave: (shiftId: string | null, taskIds: string[], areaId: string | null, locked: boolean) => void
+  onMarkSick: () => void
   onClose: () => void
 }) {
+  const [locked, setLocked] = useState(assignment?.locked ?? false)
   const staff = project.staff.find((s) => s.id === staffId)!
   const [shiftId, setShiftId] = useState<string | null>(assignment?.shift_id ?? null)
   const [taskId, setTaskId] = useState<string>(assignment?.task_ids[0] ?? '')
@@ -526,10 +567,24 @@ function CellEditor({
         ))}
 
         <div className="modal-actions">
+          {shiftId && (
+            <label className="row" style={{ marginRight: 'auto' }} title="Repair never moves a locked shift">
+              <input type="checkbox" checked={locked} onChange={(e) => setLocked(e.target.checked)} />
+              Lock shift
+            </label>
+          )}
+          {assignment && (
+            <button className="btn" onClick={onMarkSick} title="Adds sick leave for this day; press Repair to cover it">
+              Mark sick
+            </button>
+          )}
           <button className="btn lg" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn plum lg" onClick={() => onSave(shiftId, shiftId && taskId ? [taskId] : [], shiftId && areaId ? areaId : null)}>
+          <button
+            className="btn plum lg"
+            onClick={() => onSave(shiftId, shiftId && taskId ? [taskId] : [], shiftId && areaId ? areaId : null, !!shiftId && locked)}
+          >
             Apply
           </button>
         </div>
@@ -643,6 +698,41 @@ function FairnessCard({
           </tbody>
         </table>
       </div>
+    </section>
+  )
+}
+
+/** What the last repair changed, with notice and the change fee the agreements attach to it. */
+function ChangesCard({ project, changes }: { project: Project; changes: Change[] }) {
+  const staffName = new Map(project.staff.map((s) => [s.id, s.name]))
+  const code = (id: string | null) => (id ? (project.shift_types.find((s) => s.id === id)?.code ?? id) : 'Off')
+  const withFee = changes.filter((c) => c.fee_percent > 0)
+  return (
+    <section className="card no-print">
+      <div className="card-head">
+        <div>
+          <h2>
+            Changes <span className="count">{changes.length}</span>
+          </h2>
+          <p className="hint">
+            Each change needs the employee&apos;s consent.{' '}
+            {withFee.length > 0 && `${withFee.length} at short notice carry a change fee (breytingargjald).`}
+          </p>
+        </div>
+      </div>
+      <ul className="violations" style={{ maxHeight: 'none' }}>
+        {changes.map((c, i) => (
+          <li key={i} style={{ background: 'var(--cream)' }}>
+            <b>{staffName.get(c.staff_id) ?? c.staff_id}</b>
+            <span className="when">{`${WEEKDAYS[weekday(c.date)].slice(0, 2)} ${longDate(c.date)}`}</span>
+            <span className="msg">
+              {code(c.before)} → {code(c.after)}
+            </span>
+            <span className="muted">{c.notice_days <= 0 ? 'today' : `${c.notice_days} day${c.notice_days > 1 ? 's' : ''} notice`}</span>
+            {c.fee_percent > 0 && <span className="chip request">{c.fee_percent}% fee</span>}
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }

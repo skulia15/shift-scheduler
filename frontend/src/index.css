@@ -168,6 +168,12 @@ table.roster { border-collapse: collapse; font-size: 12px; width: max-content; m
 .shift-cell.leave-holiday { background: var(--line); color: var(--ink-3); }
 .shift-cell.leave-request { border: 1.5px dashed var(--request); color: var(--request-ink); }
 .shift-cell.leave-granted { border: 1.5px solid var(--lime); }
+.shift-cell.leave-sick { background: var(--error-bg); color: var(--error); }
+.shift-cell.locked { position: relative; }
+.shift-cell.locked::after { content: ""; position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 3px; background: var(--plum); border: 1.5px solid #fff; }
+.shift-cell.changed { outline: 3px solid var(--lime); outline-offset: 1px; }
+.chip.sick { background: var(--error-bg); color: var(--error); }
+.leave-cell.sick { background: var(--error-bg); color: var(--error); }
 .shift-cell.error { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--error); }
 .shift-cell.warning { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--warn-dot); }
 .roster td.stat { padding: 3px 8px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink-2); }

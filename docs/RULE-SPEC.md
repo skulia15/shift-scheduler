@@ -36,7 +36,7 @@ Status: ✅ enforced correctly · ⚠️ enforced but default or strength is wro
 | W16 | Weekend frequency | No numeric rule; holiday work "spread as evenly as possible" | soft | ✅ 50% soft default | Add holiday-fairness across periods (F3) |
 | W17 | Stórhátíðardagar | 8 days (SFV, state, FÍH-RVK; 1. maí only for SFV staff hired before 2000); 9 incl. 1. maí (SNS) | pay | ✅ marked per agreement (8, or 9 with 1. maí for SNS); 1. maí for pre-2000 SFV hires not modelled | Use in a pay export |
 | W18 | Roster notice | Draft 6 weeks ahead, final 1 month ahead | hard | ❌ | Publishing lifecycle (F6) |
-| W19 | Changes after publishing | Employee's consent; breytingargjald 2% of monthly salary (< 24 h notice), 1.3% (24–168 h) | hard (consent) | ❌ | Change log + fee estimate per change |
+| W19 | Changes after publishing | Employee's consent; breytingargjald 2% of monthly salary (< 24 h notice), 1.3% (24–168 h) | hard (consent) | ⚠️ Repair lists each change with notice and fee; no consent tracking or persistent log yet | Persist a change log per published roster |
 | W20 | Short-notice extra shift | 1.3% fee per 8 h shift taken on < 24 h notice in evening/night/weekend bands | pay | ❌ | Same change log |
 | W21 | Vaktahvati (shift incentive) | Rolling 3 pay periods: ≥ 126 h outside dagvinna, ≥ 45 h in each of 2–4 shift types, ≥ 14 attendances on average → 2.5–12.5% of salary; aukavaktir don't count | pay | ❌ | Show who qualifies; optional soft goal "keep qualifiers qualified" |
 | W22 | Shift worker | ≥ 20% of scheduled time outside dagvinna (weekday 08–17) | contract | ❌ | Show per person; warn if a contracted shift worker drops below |
@@ -66,7 +66,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 | # | Feature | Why (evidence) | App today |
 |---|---|---|---|
 | F1 | Competence tags across groups (nurse, medication-competent, Icelandic speaker, can lead a shift) with per-shift/area minimums | Skill mix is Iceland's main gap: audits found 12–15% nurses vs. 20% floor / 27% target (Landlæknir 2015) | ✅ competences per person, per-shift/area minimums, tasks that require a competence |
-| F2 | Sick-call re-plan: minimal-change re-solve + ranked replacement list with change fee | ~1 in 3 shifts differs from the posted roster; filling holes is improvised | ❌ |
+| F2 | Sick-call re-plan: minimal-change re-solve + ranked replacement list with change fee | ~1 in 3 shifts differs from the posted roster; filling holes is improvised | ✅ Repair: minimal-change re-solve, locks, past fixed, sick leave, per-change notice + fee |
 | F3 | Fairness ledger across periods (weekends, nights, Christmas/New Year, short-notice changes, denied wishes) | Holiday work must be spread evenly; fairness is judged over the year, not 4 weeks | ✅ ledger of weekends, nights, holiday/stórhátíð shifts, overtime; solver evens weekend and holiday load per FTE |
 | F4 | Stable coworkers / continuity: home area weighted toward part-timers, penalty for changing teams, continuity KPI | Coworker churn raises turnover; part-timer home-unit priority cut aides per resident 20–30% | ⚠️ fixed-area rule |
 | F5 | Demand from care weight (care hours per resident) + benchmark panel (nurse %, skilled %, care hours) | interRAI care weights drive funding; ministry plans new care-weight benchmarks by 2027 | ❌ |
@@ -83,7 +83,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 2. ~~**Holiday calendar** (W5/W17)~~ (done): generate Icelandic holidays for any period; duty reduction applied automatically.
 3. ~~**Competence tags** (F1)~~ (done) — highest care-quality impact.
 4. ~~**Prior-period carry-over** (F10) and **fairness ledger** (F3)~~ (done; "Start next period" rolls both forward) — both need history, so build them together.
-5. **Publishing + change log + sick-call re-plan** (F6, W19, F2).
+5. **Publishing + change log + sick-call re-plan** (F6, W19, F2): ~~Repair / sick-call re-plan~~ done; publishing lifecycle and a persistent change log remain.
 6. **Vaktahvati and shift-worker indicators** (W21, W22) — pay-relevant, visible to staff.
 7. Care-weight demand and benchmark panel (F5).
 

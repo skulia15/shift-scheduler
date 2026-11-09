@@ -44,6 +44,9 @@ const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
   { key: 'under_hours', label: 'Each hour below contract' },
   { key: 'weekend_excess', label: 'Each weekend above the share' },
   { key: 'weekend_fairness', label: 'Weekend load across periods' },
+  { key: 'change', label: 'Repair: changed shift, > 1 week notice' },
+  { key: 'change_week', label: 'Repair: changed shift, 2–7 days notice' },
+  { key: 'change_day', label: 'Repair: changed shift, ≤ 1 day notice' },
   { key: 'holiday_fairness', label: 'Holiday load across periods' },
   { key: 'overstaff', label: 'Each person above minimum' },
 ]
