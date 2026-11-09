@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { Checks, PageHead, RemoveButton, Section, Stepper } from '../components/fields'
-import { WEEKDAYS } from '../dates'
+import { Checks, NumberField, PageHead, RemoveButton, Section } from '../components/fields'
+import { periodDates } from '../dates'
+import { useI18n } from '../i18n'
 import { patchAt, removeAt } from '../lists'
 import { shiftColor } from '../shiftColors'
 import type { Project } from '../types'
@@ -10,16 +11,16 @@ interface Props {
   setProject: (p: Project) => void
 }
 
-const weekdayOptions = WEEKDAYS.map((label, value) => ({ value, label: label.slice(0, 2) }))
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6]
 
 function DatesField({ value, onChange }: { value: string[] | null; onChange: (v: string[] | null) => void }) {
+  const { t } = useI18n()
   return (
     <input
-      placeholder="Every week"
-      title="Comma-separated YYYY-MM-DD. When set, this row overrides weekday rows on those dates."
+      placeholder={t('Every week')}
+      title={t('Comma-separated YYYY-MM-DD. When set, this row replaces weekday rows on those dates.')}
       defaultValue={value?.join(', ') ?? ''}
-      style={{ width: 180 }}
+      style={{ width: 170 }}
       onBlur={(e) => {
         const dates = e.target.value
           .split(',')
@@ -31,19 +32,19 @@ function DatesField({ value, onChange }: { value: string[] | null; onChange: (v:
   )
 }
 
-function ShiftLabel({ project, shiftId }: { project: Project; shiftId: string }) {
-  const i = project.shift_types.findIndex((s) => s.id === shiftId)
-  const c = shiftColor(Math.max(0, i))
+function ShiftBadge({ project, shiftId }: { project: Project; shiftId: string }) {
+  const idx = project.shift_types.findIndex((s) => s.id === shiftId)
+  const c = shiftColor(Math.max(0, idx))
   return (
-    <span className="badge sm" style={{ background: c.bg, color: c.fg }}>
-      {project.shift_types[i]?.code ?? '?'}
+    <span className="badge" style={{ background: c.bg, color: c.fg }}>
+      {project.shift_types[idx]?.code ?? '?'}
     </span>
   )
 }
 
-function Options<T extends string>({ value, items, onChange }: { value: T; items: { id: T; label: string }[]; onChange: (v: T) => void }) {
+function Options<T extends string>({ value, items, onChange, label }: { value: T; items: { id: T; label: string }[]; onChange: (v: T) => void; label: string }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value as T)}>
+    <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value as T)}>
       {items.map((o) => (
         <option key={o.id} value={o.id}>
           {o.label}
@@ -53,286 +54,257 @@ function Options<T extends string>({ value, items, onChange }: { value: T; items
   )
 }
 
-function Table({ head, children }: { head: string[]; children: ReactNode }) {
+/** A compact list row for the per-area, per-skill and per-task cards. */
+function DemandRow({ children, when, onRemove }: { children: ReactNode; when: ReactNode; onRemove: () => void }) {
   return (
-    <div className="table-scroll">
-      <table className="form-table" style={{ minWidth: 860 }}>
-        <thead>
-          <tr>
-            {head.map((h) => (
-              <th key={h}>{h}</th>
-            ))}
-            <th />
-          </tr>
-        </thead>
-        <tbody>{children}</tbody>
-      </table>
-    </div>
+    <li style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+      <div className="row">
+        {children}
+        <span className="spacer" />
+        <RemoveButton onClick={onRemove} />
+      </div>
+      <div className="row">{when}</div>
+    </li>
   )
 }
 
 export function DemandView({ project: p, setProject }: Props) {
+  const i = useI18n()
+  const { t } = i
   const set = (patch: Partial<Project>) => setProject({ ...p, ...patch })
-  const shifts = p.shift_types.map((s) => ({ id: s.id, label: `${s.code} ${s.name}` }))
+  const shifts = p.shift_types.map((s) => ({ id: s.id, label: `${s.code} · ${s.name}` }))
   const groups = p.groups.map((g) => ({ id: g.id, label: g.name }))
+  // Any Monday-to-Sunday week works for the weekday labels.
+  const week = periodDates('2026-11-30', 7)
+  const weekdayOptions = ALL_DAYS.map((value) => ({ value, label: i.weekdayShort(week[value]) }))
 
-  // A typical weekday (Monday): minimum headcount per shift from weekly rows.
-  const typical = p.shift_types.map((s, i) => {
-    const perGroup = p.groups.map((g) => ({
-      name: g.name,
-      min: p.coverage.filter((c) => c.shift_id === s.id && c.group_id === g.id && !c.dates && c.weekdays.includes(0)).reduce((n, c) => n + c.min, 0),
+  // A normal weekday (Monday): minimum headcount per shift across groups, and skill minimums.
+  const typical = p.shift_types
+    .map((s) => ({
+      s,
+      n: p.coverage.filter((c) => c.shift_id === s.id && !c.dates && c.weekdays.includes(0)).reduce((n, c) => n + c.min, 0),
     }))
-    return { shift: s, color: shiftColor(i), total: perGroup.reduce((n, g) => n + g.min, 0), perGroup }
-  })
+    .map(({ s, n }) => `${s.name} ${n}`)
+    .join(' · ')
+
+  const when = (weekdays: number[], dates: string[] | null, onDays: (d: number[]) => void, onDates: (d: string[] | null) => void) => (
+    <>
+      {!dates && <Checks values={weekdays} options={weekdayOptions} onChange={onDays} />}
+      {dates && <span className="muted">{t('Only the dates listed')}</span>}
+      <DatesField value={dates} onChange={onDates} />
+    </>
+  )
 
   return (
     <>
-      <PageHead eyebrow="Demand" title="Who needs to be on each shift" />
+      <PageHead
+        title={t('Demand')}
+        sub={
+          <>
+            {t('Minimum headcount on a normal weekday:')} <b>{typical}</b>
+          </>
+        }
+      />
 
-      <Section title="A typical day" hint="Minimum headcount per shift on a Monday, all groups.">
-        <div className="card-grid">
-          {typical.map((t) => (
-            <div key={t.shift.id} className="overview" style={{ background: t.color.bg, color: t.color.fg }}>
-              <div className="row">
-                <b style={{ fontSize: 16 }}>{t.shift.code}</b>
-                <span style={{ fontWeight: 600 }}>{t.shift.name}</span>
-                <span className="spacer" />
-                <span className="big">{t.total}</span>
-              </div>
-              <div className="split">
-                {t.perGroup.map((g) => (
-                  <span key={g.name}>
-                    {g.min} {g.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
+      <Section
+        title={t('Staffing per shift')}
+        hint={t('How many from each group. A row for specific dates replaces the weekday rows on those dates.')}
+        action={
+          <button
+            className="btn primary"
+            onClick={() => set({ coverage: [...p.coverage, { shift_id: p.shift_types[0]?.id ?? '', group_id: p.groups[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, min: 1, max: null }] })}
+          >
+            {t('Add staffing row')}
+          </button>
+        }
+      >
+        <div className="table-scroll">
+          <table className="form-table" style={{ minWidth: 940 }}>
+            <thead>
+              <tr>
+                <th>{t('Shift')}</th>
+                <th>{t('Group')}</th>
+                <th>{t('Applies on')}</th>
+                <th>{t('Specific dates')}</th>
+                <th>{t('At least')}</th>
+                <th>{t('At most')}</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {p.coverage.map((c, idx) => {
+                const patch = (v: Partial<typeof c>) => set({ coverage: patchAt(p.coverage, idx, v) })
+                return (
+                  <tr key={`${idx}-${c.dates?.join() ?? ''}`}>
+                    <td>
+                      <span className="row" style={{ flexWrap: 'nowrap' }}>
+                        <ShiftBadge project={p} shiftId={c.shift_id} />
+                        <Options label={t('Shift')} value={c.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
+                      </span>
+                    </td>
+                    <td>
+                      <Options label={t('Group')} value={c.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
+                    </td>
+                    <td>{c.dates ? <span className="muted">{t('Only the dates listed')}</span> : <Checks values={c.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />}</td>
+                    <td>
+                      <DatesField value={c.dates} onChange={(dates) => patch({ dates })} />
+                    </td>
+                    <td>
+                      <NumberField value={c.min} onChange={(v) => patch({ min: v ?? 0 })} />
+                    </td>
+                    <td>
+                      <NumberField nullable placeholder={t('Any')} value={c.max} onChange={(max) => patch({ max })} />
+                    </td>
+                    <td className="right">
+                      <RemoveButton label={t('Remove row')} onClick={() => set({ coverage: removeAt(p.coverage, idx) })} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </Section>
 
-      <Section
-        title="Staffing per shift"
-        hint="Minimum and optional maximum from each group. Date rows override weekday rows."
-        action={
-          <button
-            className="btn add"
-            onClick={() =>
-              set({
-                coverage: [...p.coverage, { shift_id: p.shift_types[0]?.id ?? '', group_id: p.groups[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, min: 1, max: null }],
-              })
+      <div className="cols">
+        <div className="col">
+          <Section
+            title={t('Staffing per area')}
+            hint={t('A group with any area row on a shift has every working member placed in one hallway.')}
+            action={
+              <button
+                className="btn"
+                disabled={!p.areas.length}
+                onClick={() =>
+                  set({
+                    area_demand: [...p.area_demand, { area_id: p.areas[0].id, shift_id: p.shift_types[0]?.id ?? '', group_id: p.groups[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, min: 1, max: null }],
+                  })
+                }
+              >
+                {t('Add area row')}
+              </button>
             }
           >
-            + Staffing row
-          </button>
-        }
-      >
-        <Table head={['Shift', 'Group', 'Weekdays', 'Specific dates', 'Min', 'Max']}>
-          {p.coverage.map((c, i) => {
-            const patch = (v: Partial<typeof c>) => set({ coverage: patchAt(p.coverage, i, v) })
-            return (
-              <tr key={`${i}-${c.dates?.join() ?? ''}`}>
-                <td>
-                  <span className="row" style={{ flexWrap: 'nowrap' }}>
-                    <ShiftLabel project={p} shiftId={c.shift_id} />
-                    <Options value={c.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
-                  </span>
-                </td>
-                <td>
-                  <Options value={c.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
-                </td>
-                <td>
-                  <Checks values={c.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />
-                </td>
-                <td>
-                  <DatesField value={c.dates} onChange={(dates) => patch({ dates })} />
-                </td>
-                <td>
-                  <Stepper value={c.min} onChange={(v) => patch({ min: v ?? 0 })} />
-                </td>
-                <td>
-                  <Stepper nullable value={c.max} onChange={(max) => patch({ max })} />
-                </td>
-                <td className="right">
-                  <RemoveButton label="Remove row" onClick={() => set({ coverage: removeAt(p.coverage, i) })} />
-                </td>
-              </tr>
-            )
-          })}
-        </Table>
-      </Section>
+            {p.areas.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                {t('Add areas under Setup to plan per hallway.')}
+              </p>
+            ) : (
+              <ul className="list">
+                {p.area_demand.map((ad, idx) => {
+                  const patch = (v: Partial<typeof ad>) => set({ area_demand: patchAt(p.area_demand, idx, v) })
+                  return (
+                    <DemandRow
+                      key={`${idx}-${ad.dates?.join() ?? ''}`}
+                      onRemove={() => set({ area_demand: removeAt(p.area_demand, idx) })}
+                      when={when(ad.weekdays, ad.dates, (weekdays) => patch({ weekdays }), (dates) => patch({ dates }))}
+                    >
+                      <ShiftBadge project={p} shiftId={ad.shift_id} />
+                      <Options label={t('Area')} value={ad.area_id} items={p.areas.map((a) => ({ id: a.id, label: a.name }))} onChange={(area_id) => patch({ area_id })} />
+                      <Options label={t('Shift')} value={ad.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
+                      <Options label={t('Group')} value={ad.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
+                      <label className="field inline">
+                        {t('At least')}
+                        <NumberField width={64} value={ad.min} onChange={(v) => patch({ min: v ?? 0 })} />
+                      </label>
+                    </DemandRow>
+                  )
+                })}
+              </ul>
+            )}
+          </Section>
+        </div>
 
-      <Section
-        title="Staffing per area"
-        hint="Headcount per floor or hallway. A group with any area row on a shift has every working member placed in one area."
-        action={
-          <button
-            className="btn add"
-            disabled={!p.areas.length}
-            onClick={() =>
-              set({
-                area_demand: [
-                  ...p.area_demand,
-                  { area_id: p.areas[0].id, shift_id: p.shift_types[0]?.id ?? '', group_id: p.groups[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, min: 1, max: null },
-                ],
-              })
+        <div className="col">
+          <Section
+            title={t('Skills per shift')}
+            hint={t('At least this many people with a skill, counted across all groups, or within one hallway.')}
+            action={
+              <button
+                className="btn"
+                disabled={!p.competences.length}
+                onClick={() =>
+                  set({
+                    competence_demand: [...p.competence_demand, { competence_id: p.competences[0].id, shift_id: p.shift_types[0]?.id ?? '', area_id: null, weekdays: ALL_DAYS, dates: null, min: 1 }],
+                  })
+                }
+              >
+                {t('Add skill row')}
+              </button>
             }
           >
-            + Area row
-          </button>
-        }
-      >
-        {p.areas.length === 0 ? (
-          <p className="empty">Add areas under Setup to plan per floor or hallway.</p>
-        ) : (
-          <Table head={['Area', 'Shift', 'Group', 'Weekdays', 'Specific dates', 'Min', 'Max']}>
-            {p.area_demand.map((ad, i) => {
-              const patch = (v: Partial<typeof ad>) => set({ area_demand: patchAt(p.area_demand, i, v) })
-              return (
-                <tr key={`${i}-${ad.dates?.join() ?? ''}`}>
-                  <td>
-                    <Options value={ad.area_id} items={p.areas.map((a) => ({ id: a.id, label: a.name }))} onChange={(area_id) => patch({ area_id })} />
-                  </td>
-                  <td>
-                    <span className="row" style={{ flexWrap: 'nowrap' }}>
-                      <ShiftLabel project={p} shiftId={ad.shift_id} />
-                      <Options value={ad.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
-                    </span>
-                  </td>
-                  <td>
-                    <Options value={ad.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
-                  </td>
-                  <td>
-                    <Checks values={ad.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />
-                  </td>
-                  <td>
-                    <DatesField value={ad.dates} onChange={(dates) => patch({ dates })} />
-                  </td>
-                  <td>
-                    <Stepper value={ad.min} onChange={(v) => patch({ min: v ?? 0 })} />
-                  </td>
-                  <td>
-                    <Stepper nullable value={ad.max} onChange={(max) => patch({ max })} />
-                  </td>
-                  <td className="right">
-                    <RemoveButton label="Remove row" onClick={() => set({ area_demand: removeAt(p.area_demand, i) })} />
-                  </td>
-                </tr>
-              )
-            })}
-          </Table>
-        )}
-      </Section>
+            {p.competences.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                {t('Add skills under Setup (e.g. Lyfjaréttindi, Íslenska).')}
+              </p>
+            ) : (
+              <ul className="list">
+                {p.competence_demand.map((cd, idx) => {
+                  const patch = (v: Partial<typeof cd>) => set({ competence_demand: patchAt(p.competence_demand, idx, v) })
+                  return (
+                    <DemandRow
+                      key={`${idx}-${cd.dates?.join() ?? ''}`}
+                      onRemove={() => set({ competence_demand: removeAt(p.competence_demand, idx) })}
+                      when={when(cd.weekdays, cd.dates, (weekdays) => patch({ weekdays }), (dates) => patch({ dates }))}
+                    >
+                      <ShiftBadge project={p} shiftId={cd.shift_id} />
+                      <Options label={t('Skill')} value={cd.competence_id} items={p.competences.map((c) => ({ id: c.id, label: c.name }))} onChange={(competence_id) => patch({ competence_id })} />
+                      <Options label={t('Shift')} value={cd.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
+                      <Options
+                        label={t('Where')}
+                        value={cd.area_id ?? ''}
+                        items={[{ id: '', label: t('Whole shift') }, ...p.areas.map((a) => ({ id: a.id, label: a.name }))]}
+                        onChange={(area_id) => patch({ area_id: area_id || null })}
+                      />
+                      <label className="field inline">
+                        {t('At least')}
+                        <NumberField width={64} value={cd.min} onChange={(v) => patch({ min: v ?? 0 })} />
+                      </label>
+                    </DemandRow>
+                  )
+                })}
+              </ul>
+            )}
+          </Section>
+        </div>
 
-      <Section
-        title="Competence per shift"
-        hint="At least this many people with a skill on the shift — anywhere on the unit, or in one area. Date rows override weekday rows."
-        action={
-          <button
-            className="btn add"
-            disabled={!p.competences.length}
-            onClick={() =>
-              set({
-                competence_demand: [
-                  ...p.competence_demand,
-                  { competence_id: p.competences[0].id, shift_id: p.shift_types[0]?.id ?? '', area_id: null, weekdays: ALL_DAYS, dates: null, min: 1 },
-                ],
-              })
+        <div className="col">
+          <Section
+            title={t('Task needs')}
+            hint={t('People per task on a shift. Each person does at most one task per shift.')}
+            action={
+              <button
+                className="btn"
+                disabled={!p.tasks.length}
+                onClick={() => set({ task_demand: [...p.task_demand, { task_id: p.tasks[0].id, shift_id: p.shift_types[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, count: 1 }] })}
+              >
+                {t('Add task row')}
+              </button>
             }
           >
-            + Competence row
-          </button>
-        }
-      >
-        {p.competences.length === 0 ? (
-          <p className="empty">Add competences under Setup (e.g. Lyfjaréttindi, Íslenska).</p>
-        ) : (
-          <Table head={['Competence', 'Shift', 'Where', 'Weekdays', 'Specific dates', 'At least']}>
-            {p.competence_demand.map((cd, i) => {
-              const patch = (v: Partial<typeof cd>) => set({ competence_demand: patchAt(p.competence_demand, i, v) })
-              return (
-                <tr key={`${i}-${cd.dates?.join() ?? ''}`}>
-                  <td>
-                    <Options value={cd.competence_id} items={p.competences.map((c) => ({ id: c.id, label: c.name }))} onChange={(competence_id) => patch({ competence_id })} />
-                  </td>
-                  <td>
-                    <span className="row" style={{ flexWrap: 'nowrap' }}>
-                      <ShiftLabel project={p} shiftId={cd.shift_id} />
-                      <Options value={cd.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
-                    </span>
-                  </td>
-                  <td>
-                    <Options
-                      value={cd.area_id ?? ''}
-                      items={[{ id: '', label: 'Whole unit' }, ...p.areas.map((a) => ({ id: a.id, label: a.name }))]}
-                      onChange={(area_id) => patch({ area_id: area_id || null })}
-                    />
-                  </td>
-                  <td>
-                    <Checks values={cd.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />
-                  </td>
-                  <td>
-                    <DatesField value={cd.dates} onChange={(dates) => patch({ dates })} />
-                  </td>
-                  <td>
-                    <Stepper value={cd.min} onChange={(v) => patch({ min: v ?? 0 })} />
-                  </td>
-                  <td className="right">
-                    <RemoveButton label="Remove row" onClick={() => set({ competence_demand: removeAt(p.competence_demand, i) })} />
-                  </td>
-                </tr>
-              )
-            })}
-          </Table>
-        )}
-      </Section>
-
-      <Section
-        title="Task needs"
-        hint="People per task on a shift. Each person does at most one task per shift."
-        action={
-          <button
-            className="btn add"
-            disabled={!p.tasks.length}
-            onClick={() =>
-              set({ task_demand: [...p.task_demand, { task_id: p.tasks[0].id, shift_id: p.shift_types[0]?.id ?? '', weekdays: ALL_DAYS, dates: null, count: 1 }] })
-            }
-          >
-            + Task need
-          </button>
-        }
-      >
-        <Table head={['Task', 'Shift', 'Weekdays', 'Specific dates', 'People']}>
-          {p.task_demand.map((td, i) => {
-            const patch = (v: Partial<typeof td>) => set({ task_demand: patchAt(p.task_demand, i, v) })
-            return (
-              <tr key={`${i}-${td.dates?.join() ?? ''}`}>
-                <td>
-                  <Options value={td.task_id} items={p.tasks.map((t) => ({ id: t.id, label: t.name }))} onChange={(task_id) => patch({ task_id })} />
-                </td>
-                <td>
-                  <span className="row" style={{ flexWrap: 'nowrap' }}>
-                    <ShiftLabel project={p} shiftId={td.shift_id} />
-                    <Options value={td.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
-                  </span>
-                </td>
-                <td>
-                  <Checks values={td.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />
-                </td>
-                <td>
-                  <DatesField value={td.dates} onChange={(dates) => patch({ dates })} />
-                </td>
-                <td>
-                  <Stepper value={td.count} onChange={(v) => patch({ count: v ?? 0 })} />
-                </td>
-                <td className="right">
-                  <RemoveButton label="Remove row" onClick={() => set({ task_demand: removeAt(p.task_demand, i) })} />
-                </td>
-              </tr>
-            )
-          })}
-        </Table>
-      </Section>
+            <ul className="list">
+              {p.task_demand.map((td, idx) => {
+                const patch = (v: Partial<typeof td>) => set({ task_demand: patchAt(p.task_demand, idx, v) })
+                return (
+                  <DemandRow
+                    key={`${idx}-${td.dates?.join() ?? ''}`}
+                    onRemove={() => set({ task_demand: removeAt(p.task_demand, idx) })}
+                    when={when(td.weekdays, td.dates, (weekdays) => patch({ weekdays }), (dates) => patch({ dates }))}
+                  >
+                    <ShiftBadge project={p} shiftId={td.shift_id} />
+                    <Options label={t('Task')} value={td.task_id} items={p.tasks.map((x) => ({ id: x.id, label: x.name }))} onChange={(task_id) => patch({ task_id })} />
+                    <Options label={t('Shift')} value={td.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
+                    <label className="field inline">
+                      <NumberField width={64} value={td.count} onChange={(v) => patch({ count: v ?? 0 })} />
+                      {td.count === 1 ? t('person') : t('people')}
+                    </label>
+                  </DemandRow>
+                )
+              })}
+            </ul>
+          </Section>
+        </div>
+      </div>
     </>
   )
 }

@@ -1,6 +1,7 @@
 """HTTP API. Stateless: every request carries the whole Project."""
 
 from datetime import date
+from typing import Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -19,9 +20,12 @@ app = FastAPI(title="Shift Scheduler")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_methods=["*"], allow_headers=["*"])
 
 
+Lang = Literal["en", "is"]
+
+
 @app.get("/api/sample")
-def get_sample() -> Project:
-    return sample_project()
+def get_sample(lang: Lang = "en") -> Project:
+    return sample_project(lang)
 
 
 @app.get("/api/holidays")
@@ -30,14 +34,14 @@ def get_holidays(start: date, days: int, agreement: Agreement = "sfv") -> list[P
 
 
 @app.post("/api/solve")
-async def post_solve(project: Project) -> SolveResult:
+async def post_solve(project: Project, lang: Lang = "en") -> SolveResult:
     # CP-SAT blocks for up to `solve_seconds`; keep the event loop free.
-    return await run_in_threadpool(solve, project)
+    return await run_in_threadpool(solve, project, lang)
 
 
 @app.post("/api/repair")
-async def post_repair(body: RepairRequest) -> SolveResult:
-    return await run_in_threadpool(repair, body.project, body.roster, body.today)
+async def post_repair(body: RepairRequest, lang: Lang = "en") -> SolveResult:
+    return await run_in_threadpool(repair, body.project, body.roster, body.today, body.mode, lang)
 
 
 @app.post("/api/import/roster")
@@ -65,5 +69,5 @@ def post_next_period(body: ValidateRequest) -> Project:
 
 
 @app.post("/api/validate")
-def post_validate(body: ValidateRequest) -> Evaluation:
-    return evaluate(body.project, body.roster)
+def post_validate(body: ValidateRequest, lang: Lang = "en") -> Evaluation:
+    return evaluate(body.project, body.roster, lang)

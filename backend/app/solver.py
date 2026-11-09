@@ -37,6 +37,7 @@ class Repair:
 
     base: dict[tuple[int, int], Assignment]  # (staff, day) -> shift
     today: int  # day index; may lie before or after the period
+    keep_unlocked: bool = True  # False = regenerate: unlocked shifts and past days are free
 
     def notice(self, day: int) -> int:
         return day - self.today
@@ -274,8 +275,11 @@ class _Model:
         for (s, d, t), var in self.work.items():
             base = rep.base.get((s, d))
             same = base is not None and ctx.shift_index.get(base.shift_id) == t
-            if d < rep.today or (base is not None and base.locked):
+            frozen = (base is not None and base.locked) or (rep.keep_unlocked and d < rep.today)
+            if frozen:
                 m.add(var == int(same))
+                continue
+            if not rep.keep_unlocked:
                 continue
             if same:
                 self.penalise(1 - var, rep.cost(d, w) * OCCURRENCE)
@@ -289,7 +293,7 @@ class _Model:
         # Fixed shifts keep their area and tasks too.
         for (s, d), base in rep.base.items():
             t = ctx.shift_index.get(base.shift_id)
-            if t is None or not (d < rep.today or base.locked):
+            if t is None or not (base.locked or (rep.keep_unlocked and d < rep.today)):
                 continue
             if base.area_id and (s, d, t, base.area_id) in self.area:
                 m.add(self.area[s, d, t, base.area_id] == self.work[s, d, t])
@@ -486,20 +490,21 @@ def _run(ctx: Context, relax: bool, seconds: float, repair: Repair | None = None
     return status, model, solver
 
 
-def solve(project: Project) -> SolveResult:
-    return _solve(project, None)
+def solve(project: Project, lang: str = "en") -> SolveResult:
+    return _solve(project, None, lang)
 
 
-def repair(project: Project, roster: list[Assignment], today: date) -> SolveResult:
-    """Fix the published roster's problems with as few, as late-as-possible-noticed changes as possible."""
+def repair(project: Project, roster: list[Assignment], today: date, mode: str = "repair", lang: str = "en") -> SolveResult:
+    """Repair: fix the roster's problems with as few, as late-noticed changes as possible.
+    Regenerate: keep only locked shifts and re-plan the rest; changes are still listed."""
     ctx = build_context(project)
     base = {
         (ctx.staff_index[a.staff_id], ctx.day_of[a.date]): a
         for a in roster
         if a.staff_id in ctx.staff_index and a.date in ctx.day_of
     }
-    rep = Repair(base=base, today=(today - ctx.dates[0]).days)
-    result = _solve(project, rep)
+    rep = Repair(base=base, today=(today - ctx.dates[0]).days, keep_unlocked=mode == "repair")
+    result = _solve(project, rep, lang)
     if result.status == "failed":
         result.message = "No roster keeps every locked shift within the hard rules. Unlock some shifts and repair again."
         return result
@@ -516,11 +521,14 @@ def repair(project: Project, roster: list[Assignment], today: date) -> SolveResu
             )
     result.changes = changes
     n = len(changes)
-    result.message = "No changes needed." if n == 0 else f"Repaired with {n} change{'s' if n > 1 else ''}."
+    if mode == "regenerate":
+        result.message = f"Regenerated; {n} cell{'s' if n != 1 else ''} changed."
+    else:
+        result.message = "No changes needed." if n == 0 else f"Repaired with {n} change{'s' if n > 1 else ''}."
     return result
 
 
-def _solve(project: Project, rep: Repair | None) -> SolveResult:
+def _solve(project: Project, rep: Repair | None, lang: str = "en") -> SolveResult:
     started = time.monotonic()
     ctx = build_context(project)
     status, model, solver = _run(ctx, relax=False, seconds=project.solve_seconds, repair=rep)
@@ -544,7 +552,7 @@ def _solve(project: Project, rep: Repair | None) -> SolveResult:
             )
 
     roster = model.roster(solver)
-    evaluation = evaluate(project, roster)
+    evaluation = evaluate(project, roster, lang)
     return SolveResult(
         status=label,
         message=message,

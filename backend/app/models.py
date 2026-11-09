@@ -449,6 +449,9 @@ class RepairRequest(BaseModel):
     project: Project
     roster: list[Assignment]
     today: DateT = Field(description="Days before this are history and are never changed")
+    mode: Literal["repair", "regenerate"] = Field(
+        "repair", description="repair: fewest changes; regenerate: keep only locked shifts, re-plan everything else"
+    )
 
 
 class Change(BaseModel):

@@ -394,3 +394,13 @@ def test_semicolon_csv_with_day_month_headers():
         (START + timedelta(days=4), "E"),
     }
     assert all(a.staff_id == "s1" for a in result.roster)
+
+
+def test_regenerate_keeps_locked_shifts_and_may_change_the_rest():
+    project = small_project()
+    roster = solve(project).roster
+    locked = roster[5].model_copy(update={"locked": True})
+    roster = [locked if i == 5 else a for i, a in enumerate(roster)]
+    result = repair(project, roster, today=START + timedelta(days=30), mode="regenerate")
+    assert (locked.staff_id, locked.date, locked.shift_id) in {(a.staff_id, a.date, a.shift_id) for a in result.roster}
+    assert errors(result) == []

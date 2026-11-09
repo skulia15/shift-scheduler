@@ -14,6 +14,7 @@ from .models import (
     FixedAreaRule,
     AvoidTaskRepeatRule,
     CoverageDemand,
+    LaborRules,
     Leave,
     MaxShiftTypeRule,
     Period,
@@ -30,34 +31,35 @@ WEEKDAYS = [0, 1, 2, 3, 4]
 DAY_SHIFTS = ["M", "K"]
 
 
-def sample_project() -> Project:
+def sample_project(lang: str = "en") -> Project:
+    icelandic = lang == "is"
     nurses = [
-        ("Anna", 100, None),
-        ("Bjarni", 100, None),
-        ("Guðrún", 80, None),
-        ("Helga", 80, DAY_SHIFTS),
-        ("Jón", 60, ["N"]),
-        ("Katrín", 60, None),
-        ("Lára", 80, None),
+        ("Anna Jónsdóttir", 100, None),
+        ("Bjarni Pálsson", 100, None),
+        ("Guðrún Helgadóttir", 80, None),
+        ("Helga Sigurðardóttir", 80, DAY_SHIFTS),
+        ("Jón Einarsson", 60, ["N"]),
+        ("Katrín Ólafsdóttir", 60, None),
+        ("Lára Björnsdóttir", 80, None),
     ]
     floor = [
-        ("Lilja", 100, None),
-        ("Magnús", 100, None),
-        ("Nína", 100, DAY_SHIFTS),
-        ("Ólafur", 100, None),
-        ("Petra", 80, None),
-        ("Ragnar", 80, DAY_SHIFTS),
-        ("Sigríður", 80, None),
-        ("Tómas", 80, None),
-        ("Unnur", 60, ["M"]),
-        ("Vala", 60, None),
-        ("Þóra", 60, ["N", "K"]),
-        ("Ýr", 80, None),
-        ("Örn", 100, None),
+        ("Lilja Magnúsdóttir", 100, None),
+        ("Magnús Gunnarsson", 100, None),
+        ("Nína Árnadóttir", 100, DAY_SHIFTS),
+        ("Ólafur Stefánsson", 100, None),
+        ("Petra Kristjánsdóttir", 80, None),
+        ("Tomasz Nowak", 80, DAY_SHIFTS),
+        ("Sigríður Guðmundsdóttir", 80, None),
+        ("Joy Dela Cruz", 80, None),
+        ("Unnur Davíðsdóttir", 60, ["M"]),
+        ("Vala Friðriksdóttir", 60, None),
+        ("Þóra Sveinsdóttir", 60, ["N", "K"]),
+        ("Aistė Kazlauskienė", 80, None),
+        ("Örn Baldursson", 100, None),
     ]
     # Sjúkraliðar with medication rights; floor staff still learning Icelandic.
-    medication = {"Lilja", "Ólafur", "Sigríður", "Örn"}
-    no_icelandic = {"Ragnar", "Tómas", "Ýr"}
+    medication = {"Lilja Magnúsdóttir", "Ólafur Stefánsson", "Sigríður Guðmundsdóttir", "Örn Baldursson"}
+    no_icelandic = {"Tomasz Nowak", "Joy Dela Cruz", "Aistė Kazlauskienė"}
     staff = [
         Staff(
             id=f"n{i}", name=name, group_ids=["nurse"], employment_percent=pct, allowed_shift_ids=allowed, competence_ids=["med", "is"]
@@ -135,10 +137,11 @@ def sample_project() -> Project:
             Leave(staff_id="f10", start=date(2026, 12, 18), end=date(2026, 12, 18), kind="request"),
         ],
         public_holidays=holidays_between(date(2026, 11, 30), 28),
+        rules=_rules(icelandic),
         custom_rules=[
             AvoidTaskRepeatRule(
                 id="bath-repeat",
-                description="Floor staff should not bathe residents two days running",
+                description="Sami starfsmaður baðar ekki tvo daga í röð" if icelandic else "Floor staff should not bathe residents two days running",
                 group_id="floor",
                 task_id="bath",
                 max_count=1,
@@ -147,7 +150,7 @@ def sample_project() -> Project:
             ),
             RotateTaskEvenlyRule(
                 id="dining-rotation",
-                description="Dining room duty rotates evenly among floor staff",
+                description="Matsalur skiptist jafnt milli starfsfólks í umönnun" if icelandic else "Dining room duty rotates evenly among floor staff",
                 group_id="floor",
                 task_id="dining",
                 proportional_to_employment=True,
@@ -155,7 +158,7 @@ def sample_project() -> Project:
             ),
             RotateTaskEvenlyRule(
                 id="bath-rotation",
-                description="Bathing rotates evenly among floor staff",
+                description="Böðun skiptist jafnt milli starfsfólks í umönnun" if icelandic else "Bathing rotates evenly among floor staff",
                 group_id="floor",
                 task_id="bath",
                 proportional_to_employment=True,
@@ -163,20 +166,20 @@ def sample_project() -> Project:
             ),
             FixedAreaRule(
                 id="lilja-hallway",
-                description="Lilja always works in Gangur A",
+                description="Lilja er alltaf á Gangi A" if icelandic else "Lilja always works in Gangur A",
                 staff_id="f1",
                 area_id="A",
                 hard=True,
             ),
             DiverseShiftsRule(
                 id="petra-variety",
-                description="Petra wants a varied mix of shifts",
+                description="Petra vill fjölbreyttar vaktir" if icelandic else "Petra wants a varied mix of shifts",
                 staff_id="f5",
                 weight=15,
             ),
             MaxShiftTypeRule(
                 id="floor-nights",
-                description="Floor staff work at most 8 night shifts per period",
+                description="Starfsfólk í umönnun tekur mest 8 næturvaktir á tímabilinu" if icelandic else "Floor staff work at most 8 night shifts per period",
                 group_id="floor",
                 shift_id="N",
                 max_count=8,
@@ -185,3 +188,11 @@ def sample_project() -> Project:
         ],
         solve_seconds=20,
     )
+
+
+def _rules(icelandic: bool) -> LaborRules:
+    rules = LaborRules()
+    if icelandic:
+        names = ["Kvöld á virkum dögum", "Dagur um helgar og á helgidögum", "Nótt", "Aðfangadags- og gamlárskvöld"]
+        rules.weight_bands = [b.model_copy(update={"name": n}) for b, n in zip(rules.weight_bands, names)]
+    return rules

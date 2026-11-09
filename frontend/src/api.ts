@@ -29,6 +29,13 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
   return res.json()
 }
 
+let currentLang = 'en'
+/** UI language for messages the server writes (rule check). */
+export function setApiLang(lang: string) {
+  currentLang = lang
+}
+const q = () => `lang=${currentLang}`
+
 export const api = {
   importRoster: (project: Project, file: File) => {
     const form = new FormData()
@@ -45,11 +52,12 @@ export const api = {
     if (!res.ok) throw new Error(`Export failed: ${res.status}`)
     return res.blob()
   },
-  sample: () => call<Project>('sample'),
+  sample: () => call<Project>(`sample?${q()}`),
   holidays: (start: string, days: number, agreement: Agreement) =>
     call<PublicHoliday[]>(`holidays?start=${start}&days=${days}&agreement=${agreement}`),
-  solve: (project: Project) => call<SolveResult>('solve', project),
-  repair: (project: Project, roster: Assignment[], today: string) => call<SolveResult>('repair', { project, roster, today }),
+  solve: (project: Project) => call<SolveResult>(`solve?${q()}`, project),
+  repair: (project: Project, roster: Assignment[], today: string, mode: 'repair' | 'regenerate' = 'repair') =>
+    call<SolveResult>(`repair?${q()}`, { project, roster, today, mode }),
   nextPeriod: (project: Project, roster: Assignment[]) => call<Project>('next-period', { project, roster }),
-  validate: (project: Project, roster: Assignment[]) => call<Evaluation>('validate', { project, roster }),
+  validate: (project: Project, roster: Assignment[]) => call<Evaluation>(`validate?${q()}`, { project, roster }),
 }

@@ -1,11 +1,11 @@
-/** Shift colours by shift-type position: lime, pink, plum, then extras for added shift types. */
+/** Shift colours by shift-type position: morning, evening, night, then extras for added shift types. */
 const PALETTE = [
-  { bg: '#e9f4b3', fg: '#2f3513' },
-  { bg: '#fae0fe', fg: '#4e0e58' },
-  { bg: '#37083e', fg: '#fdf0ff' },
-  { bg: '#dbe7f6', fg: '#16325c' },
-  { bg: '#fde2c8', fg: '#6b3205' },
-  { bg: '#d9efe6', fg: '#14453a' },
+  { bg: '#f6e6a6', fg: '#4a3b00' },
+  { bg: '#f2c9c2', fg: '#5c1f17' },
+  { bg: '#1f3a5f', fg: '#e8f0fa' },
+  { bg: '#cfe7e4', fg: '#084f4b' },
+  { bg: '#e2d7f0', fg: '#3b2560' },
+  { bg: '#d9e6c8', fg: '#2c4214' },
 ]
 
 export function shiftColor(index: number) {

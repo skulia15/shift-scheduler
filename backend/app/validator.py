@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from .context import Context, build_context
+from .messages import message
 from .models import (
     Assignment,
     AvoidTaskRepeatRule,
@@ -56,9 +57,23 @@ def _runs(days: list[int]) -> list[list[int]]:
     return runs
 
 
-def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
+def _h(hours: float) -> str:
+    """Hours for messages: 8, 7.5."""
+    return f"{hours:.1f}".rstrip("0").rstrip(".")
+
+
+def evaluate(project: Project, roster: list[Assignment], lang: str = "en") -> Evaluation:
     ctx = build_context(project)
     rules = project.rules
+
+    def M(template: str, **kw) -> str:
+        return message(lang, template, **kw)
+
+    task_name = {t.id: t.name for t in project.tasks}
+    group_name = {g.id: g.name for g in project.groups}
+    area_name = {a.id: a.name for a in project.areas}
+    shift_name = {sh.id: sh.name for sh in project.shift_types}
+    competence_name = {c.id: c.name for c in project.competences}
     out: list[Violation] = []
 
     def v(rule: str, severity: str, message: str, s: int | None = None, d: int | None = None, t: int | None = None):
@@ -79,10 +94,10 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
     for a in roster:
         s, d, t = ctx.staff_index.get(a.staff_id), ctx.day_of.get(a.date), ctx.shift_index.get(a.shift_id)
         if s is None or d is None or t is None:
-            out.append(Violation(rule="unknown_reference", severity="error", message=f"Unknown staff, date or shift in {a}"))
+            out.append(Violation(rule="unknown_reference", severity="error", message=M("Unknown person, date or shift in {what}", what=f"{a.staff_id} {a.date} {a.shift_id}")))
             continue
         if (s, d) in work:
-            v("one_shift_per_day", "error", f"{ctx.staff[s].name} has more than one shift", s, d, t)
+            v("one_shift_per_day", "error", M("{name} has more than one shift", name=ctx.staff[s].name), s, d, t)
             continue
         work[(s, d)] = (t, a.task_ids)
         area_of[(s, d)] = a.area_id
@@ -90,34 +105,34 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
     for (s, d), (t, tasks) in work.items():
         name = ctx.staff[s].name
         if t not in ctx.eligible[s]:
-            v("eligibility", "error", f"{name} may not work {ctx.shifts[t].name}", s, d, t)
+            v("eligibility", "error", M("{name} may not work {shift}", name=name, shift=ctx.shifts[t].name), s, d, t)
         if (s, d) in ctx.blocked:
-            v("leave", "error", f"{name} is on holiday / granted day off", s, d, t)
+            v("leave", "error", M("{name} is on leave or a granted day off", name=name), s, d, t)
         elif (s, d) in ctx.request:
-            v("request_denied", "warning", f"{name} asked for this day off", s, d, t)
+            v("request_denied", "warning", M("{name} asked for this day off", name=name), s, d, t)
         for task_id in tasks:
             if task_id not in ctx.task_group:
-                v("unknown_reference", "error", f"Unknown task {task_id}", s, d, t)
+                v("unknown_reference", "error", M("Unknown task {task}", task=task_id), s, d, t)
             elif not ctx.in_group(s, ctx.task_group[task_id]):
-                v("task_group", "error", f"{name} is not in the group that does {task_id}", s, d, t)
+                v("task_group", "error", M("{name} is not in the group that does {task}", name=name, task=task_name.get(task_id, task_id)), s, d, t)
             elif not ctx.has_competence(s, ctx.task_competence[task_id]):
-                v("task_competence", "error", f"{name} lacks {ctx.task_competence[task_id]} needed for {task_id}", s, d, t)
+                v("task_competence", "error", M("{name} lacks {skill}, needed for {task}", name=name, skill=competence_name.get(ctx.task_competence[task_id], ctx.task_competence[task_id]), task=task_name.get(task_id, task_id)), s, d, t)
         area = area_of[(s, d)]
         if area is not None and area not in {x.id for x in ctx.project.areas}:
-            v("unknown_reference", "error", f"Unknown area {area}", s, d, t)
+            v("unknown_reference", "error", M("Unknown area {area}", area=area), s, d, t)
         elif area is None and ctx.needs_area(s, d, t):
-            v("area_missing", "error", f"{name} has no area on this shift", s, d, t)
+            v("area_missing", "error", M("{name} has no area on this shift", name=name), s, d, t)
         if len(tasks) > 1:
-            v("one_task_per_shift", "error", f"{name} has {len(tasks)} tasks on one shift", s, d, t)
+            v("one_task_per_shift", "error", M("{name} has {n} tasks on one shift", name=name, n=len(tasks)), s, d, t)
 
     # Shift types outside the normal length (a local agreement is needed).
     used_types = {t for (t, _) in work.values()}
     for t in sorted(used_types):
         hours = ctx.shifts[t].paid_minutes / 60
         if rules.min_shift_hours is not None and hours < rules.min_shift_hours:
-            v("shift_length", "warning", f"{ctx.shifts[t].name} is {hours:g}h, shorter than {rules.min_shift_hours:g}h", t=t)
+            v("shift_length", "warning", M("{shift} is {h} h, shorter than {limit} h", shift=ctx.shifts[t].name, h=f"{hours:g}", limit=f"{rules.min_shift_hours:g}"), t=t)
         if rules.normal_max_shift_hours is not None and hours > rules.normal_max_shift_hours:
-            v("shift_length", "warning", f"{ctx.shifts[t].name} is {hours:g}h, longer than the normal {rules.normal_max_shift_hours:g}h", t=t)
+            v("shift_length", "warning", M("{shift} is {h} h, longer than the normal {limit} h", shift=ctx.shifts[t].name, h=f"{hours:g}", limit=f"{rules.normal_max_shift_hours:g}"), t=t)
 
     # Coverage
     cells: list[CoverageCell] = []
@@ -125,9 +140,9 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         n = sum(1 for (s, dd), (tt, _) in work.items() if dd == d and tt == t and ctx.in_group(s, group_id))
         cells.append(CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, group_id=group_id, required=lo, assigned=n))
         if n < lo:
-            v("coverage", "error", f"{group_id}: {n} of {lo} required", d=d, t=t)
+            v("coverage", "error", M("{group}: {n} of {need} required", group=group_name.get(group_id, group_id), n=n, need=lo), d=d, t=t)
         if hi is not None and n > hi:
-            v("coverage", "error", f"{group_id}: {n} exceeds maximum {hi}", d=d, t=t)
+            v("coverage", "error", M("{group}: {n}, more than the maximum {max}", group=group_name.get(group_id, group_id), n=n, max=hi), d=d, t=t)
 
     for (d, t, area_id, group_id), (lo, hi) in sorted(ctx.area_need.items()):
         n = sum(
@@ -137,11 +152,10 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, group_id=group_id, area_id=area_id, required=lo, assigned=n)
         )
         if n < lo:
-            v("area_coverage", "error", f"{area_id} {group_id}: {n} of {lo} required", d=d, t=t)
+            v("area_coverage", "error", M("{area}, {group}: {n} of {need} required", area=area_name.get(area_id, area_id), group=group_name.get(group_id, group_id), n=n, need=lo), d=d, t=t)
         if hi is not None and n > hi:
-            v("area_coverage", "error", f"{area_id} {group_id}: {n} exceeds maximum {hi}", d=d, t=t)
+            v("area_coverage", "error", M("{area}, {group}: {n}, more than the maximum {max}", area=area_name.get(area_id, area_id), group=group_name.get(group_id, group_id), n=n, max=hi), d=d, t=t)
 
-    competence_name = {c.id: c.name for c in ctx.project.competences}
     for (d, t, comp, area_id), lo in sorted(ctx.competence_need.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] or "")):
         n = sum(
             1
@@ -153,13 +167,13 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         )
         if n < lo:
             where = f" in {area_id}" if area_id else ""
-            v("competence", "error", f"{competence_name.get(comp, comp)}{where}: {n} of {lo} required", d=d, t=t)
+            v("competence", "error", (M("{skill} in {area}: {n} of {need} required", skill=competence_name.get(comp, comp), area=area_name.get(area_id, area_id), n=n, need=lo) if area_id else M("{skill}: {n} of {need} required", skill=competence_name.get(comp, comp), n=n, need=lo)), d=d, t=t)
 
     if rules.lone_night_warning:
         for d in range(ctx.n_days):
             for t, shift in enumerate(ctx.shifts):
                 if shift.is_night and sum(1 for (_, dd), (tt, _) in work.items() if dd == d and tt == t) == 1:
-                    v("lone_night", "warning", f"Only one person on {shift.name}: safety assessment required", d=d, t=t)
+                    v("lone_night", "warning", M("Only one person on {shift}: a safety assessment is required", shift=shift.name), d=d, t=t)
 
     task_done: Counter[tuple[int, int, str]] = Counter()
     for (s, d), (t, tasks) in work.items():
@@ -169,9 +183,9 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         d, t, task_id = key
         need, done = ctx.task_need.get(key, 0), task_done.get(key, 0)
         if done < need:
-            v("task_coverage", "error", f"{task_id}: {done} of {need} assigned", d=d, t=t)
+            v("task_coverage", "error", M("{task}: {n} of {need} assigned", task=task_name.get(task_id, task_id), n=done, need=need), d=d, t=t)
         elif done > need:
-            v("task_coverage", "warning", f"{task_id}: {done} assigned, {need} needed", d=d, t=t)
+            v("task_coverage", "warning", M("{task}: {n} assigned, {need} needed", task=task_name.get(task_id, task_id), n=done, need=need), d=d, t=t)
 
     # Per-person working-time rules
     stats: list[StaffStats] = []
@@ -192,26 +206,26 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 continue
             rest = ctx.rest_minutes(d1, t1, d2, t2)
             if rest < rules.min_rest_hours_absolute * 60:
-                v("rest", "error", f"{name}: only {rest / 60:.1f}h rest (minimum {rules.min_rest_hours_absolute}h)", s, d2, t2)
+                v("rest", "error", M("{name}: only {h} h rest (minimum {limit} h)", name=name, h=_h(rest / 60), limit=_h(rules.min_rest_hours_absolute)), s, d2, t2)
             elif rest < rules.min_rest_hours * 60:
-                v("short_rest", "warning", f"{name}: {rest / 60:.1f}h rest (target {rules.min_rest_hours}h)", s, d2, t2)
+                v("short_rest", "warning", M("{name}: {h} h rest (target {limit} h)", name=name, h=_h(rest / 60), limit=_h(rules.min_rest_hours)), s, d2, t2)
                 short_days.append(d2)
         if rules.max_short_rests_per_week is not None:
             for week in ctx.full_weeks():
                 n = sum(1 for d in short_days if d in week)
                 if n > rules.max_short_rests_per_week:
-                    v("short_rest_week", "warning", f"{name}: {n} short rests in one week (max {rules.max_short_rests_per_week})", s, week[0])
+                    v("short_rest_week", "warning", M("{name}: {n} short rests in one week (max {max})", name=name, n=n, max=rules.max_short_rests_per_week), s, week[0])
 
         if rules.max_consecutive_days is not None:
             for run in _runs(seq_days):
                 if len(run) > rules.max_consecutive_days and run[-1] >= 0:
-                    v("consecutive_days", "error", f"{name}: {len(run)} days in a row (max {rules.max_consecutive_days})", s, max(run[0], 0))
+                    v("consecutive_days", "error", M("{name}: {n} days in a row (max {max})", name=name, n=len(run), max=rules.max_consecutive_days), s, max(run[0], 0))
 
         if rules.max_consecutive_nights is not None:
             nights = [d for d, t, _ in seq if ctx.shifts[t].is_night]
             for run in _runs(nights):
                 if len(run) > rules.max_consecutive_nights and run[-1] >= 0:
-                    v("consecutive_nights", "error", f"{name}: {len(run)} nights in a row (max {rules.max_consecutive_nights})", s, max(run[0], 0))
+                    v("consecutive_nights", "error", M("{name}: {n} nights in a row (max {max})", name=name, n=len(run), max=rules.max_consecutive_nights), s, max(run[0], 0))
 
         shift_on = {d: t for d, t, _ in seq}
         if rules.weekly_rest_hours is not None:
@@ -225,7 +239,7 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 rested[x] = x not in shift_on and ctx.rest_around(x, before, after) >= limit
             for start in range(-H, ctx.n_days - 6):
                 if start + 6 >= 0 and not any(rested[x] for x in range(start, start + 7)):
-                    v("weekly_rest", "error", f"{name}: no {rules.weekly_rest_hours:g}h continuous rest in 7 days", s, max(start, 0))
+                    v("weekly_rest", "error", M("{name}: no {h} h continuous rest in 7 days", name=name, h=_h(rules.weekly_rest_hours)), s, max(start, 0))
                     break
 
         if rules.days_off_per_week:
@@ -234,26 +248,30 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 off = [d for d in week if d not in shift_on]
                 consecutive = any(d + 1 in off for d in off if d + 1 in week)
                 if len(off) < need or (rules.days_off_consecutive and need >= 2 and not consecutive):
-                    what = f"{len(off)} days off" if len(off) < need else "days off not consecutive"
                     severity = "error" if rules.days_off_hard else "warning"
-                    v("days_off", severity, f"{name}: {what} in week of {ctx.dates[week[0]]:%d.%m}", s, week[0])
+                    week_of = f"{ctx.dates[week[0]].day}.{ctx.dates[week[0]].month}."
+                    if len(off) < need:
+                        text = M("{name}: {n} days off in the week of {week}", name=name, n=len(off), week=week_of)
+                    else:
+                        text = M("{name}: days off not consecutive in the week of {week}", name=name, week=week_of)
+                    v("days_off", severity, text, s, week[0])
 
         worked = sum(ctx.paid[t] for _, t, _ in mine)
         credited = min(sum(ctx.credited[d, t] for d, t, _ in mine), ctx.credit_cap(worked))
         target = ctx.target_minutes[s]
         overtime, under = max(0, credited - target), max(0, target - credited)
         if rules.max_avg_weekly_hours is not None and worked > rules.max_avg_weekly_hours * 60 * ctx.n_days / 7:
-            v("max_avg_weekly_hours", "error", f"{name}: averages {worked / 60 / ctx.n_days * 7:.1f}h/week", s)
+            v("max_avg_weekly_hours", "error", M("{name}: averages {h} h a week", name=name, h=_h(worked / 60 / ctx.n_days * 7)), s)
         if rules.max_overtime_hours is not None and overtime > rules.max_overtime_hours * 60:
-            v("overtime_cap", "error", f"{name}: {overtime / 60:.1f}h overtime (cap {rules.max_overtime_hours}h)", s)
+            v("overtime_cap", "error", M("{name}: {h} h overtime (cap {limit} h)", name=name, h=_h(overtime / 60), limit=_h(rules.max_overtime_hours)), s)
         elif overtime >= 60:
-            v("overtime", "warning", f"{name}: {overtime / 60:.1f}h above contract", s)
+            v("overtime", "warning", M("{name}: {h} h above contract", name=name, h=_h(overtime / 60)), s)
         if under >= 4 * 60:
-            v("under_hours", "warning", f"{name}: {under / 60:.1f}h below contract", s)
+            v("under_hours", "warning", M("{name}: {h} h below contract", name=name, h=_h(under / 60)), s)
 
         worked_weekends = sum(1 for wk in weekends if any(d in days for d in wk))
         if allowed_weekends is not None and worked_weekends > allowed_weekends:
-            v("weekends", "warning", f"{name}: works {worked_weekends} weekends (target max {allowed_weekends})", s)
+            v("weekends", "warning", M("{name}: works {n} weekends (target at most {max})", name=name, n=worked_weekends, max=allowed_weekends), s)
 
         stats.append(
             StaffStats(
@@ -273,12 +291,19 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             )
         )
 
-    _custom_rules(ctx, work, area_of, v)
+    _custom_rules(ctx, work, area_of, v, M, task_name, area_name, shift_name)
     return Evaluation(violations=out, staff=stats, coverage=cells)
 
 
 def _custom_rules(
-    ctx: Context, work: dict[tuple[int, int], tuple[int, list[str]]], area_of: dict[tuple[int, int], str | None], v
+    ctx: Context,
+    work: dict[tuple[int, int], tuple[int, list[str]]],
+    area_of: dict[tuple[int, int], str | None],
+    v,
+    M,
+    task_name: dict[str, str],
+    area_name: dict[str, str],
+    shift_name: dict[str, str],
 ) -> None:
     by_staff: dict[int, dict[int, tuple[int, list[str]]]] = defaultdict(dict)
     for (s, d), entry in work.items():
@@ -298,7 +323,7 @@ def _custom_rules(
                 for start in range(max(1, ctx.n_days - rule.window_days + 1)):
                     n = sum(1 for d in task_days if start <= d < start + rule.window_days)
                     if n > rule.max_count:
-                        v(rule.id, severity, f"{label}: {ctx.staff[s].name} does {rule.task_id} {n}× in {rule.window_days} days", s, start)
+                        v(rule.id, severity, M("{label}: {name} does {task} {n}× in {days} days", label=label, name=ctx.staff[s].name, task=task_name.get(rule.task_id, rule.task_id), n=n, days=rule.window_days), s, start)
                         break
 
         elif isinstance(rule, RotateTaskEvenlyRule):
@@ -306,7 +331,7 @@ def _custom_rules(
             for s, target in targets.items():
                 n = sum(1 for _, tasks in by_staff[s].values() if rule.task_id in tasks)
                 if abs(n - target) > 1:
-                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} does {rule.task_id} {n}×, fair share ≈{target:.1f}", s)
+                    v(rule.id, severity, M("{label}: {name} does {task} {n}×, fair share about {share}", label=label, name=ctx.staff[s].name, task=task_name.get(rule.task_id, rule.task_id), n=n, share=_h(target)), s)
 
         elif isinstance(rule, MaxShiftTypeRule):
             t = ctx.shift_index[rule.shift_id]
@@ -315,13 +340,13 @@ def _custom_rules(
                     continue
                 n = sum(1 for tt, _ in by_staff[s].values() if tt == t)
                 if n > rule.max_count:
-                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} works {rule.shift_id} {n}× (max {rule.max_count})", s)
+                    v(rule.id, severity, M("{label}: {name} works {shift} {n}× (max {max})", label=label, name=ctx.staff[s].name, shift=shift_name.get(rule.shift_id, rule.shift_id), n=n, max=rule.max_count), s)
 
         elif isinstance(rule, FixedAreaRule):
             s = ctx.staff_index[rule.staff_id]
             for d, (t, _) in sorted(by_staff[s].items()):
                 if area_of[(s, d)] != rule.area_id:
-                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} is in {area_of[(s, d)] or 'no area'}, not {rule.area_id}", s, d, t)
+                    v(rule.id, severity, M("{label}: {name} is in {area}, not {wanted}", label=label, name=ctx.staff[s].name, area=area_name.get(area_of[(s, d)] or "", M("no area")), wanted=area_name.get(rule.area_id, rule.area_id)), s, d, t)
 
         elif isinstance(rule, DiverseShiftsRule):
             s = ctx.staff_index[rule.staff_id]
@@ -330,7 +355,7 @@ def _custom_rules(
                 counts = {ctx.shifts[t].code: sum(1 for tt, _ in by_staff[s].values() if tt == t) for t in types}
                 if max(counts.values()) - min(counts.values()) > 1:
                     mix = ", ".join(f"{code} {n}" for code, n in counts.items())
-                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} shift mix is uneven ({mix})", s)
+                    v(rule.id, severity, M("{label}: {name} has an uneven shift mix ({mix})", label=label, name=ctx.staff[s].name, mix=mix), s)
 
         elif isinstance(rule, ForbidSequenceRule):
             a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]
@@ -340,4 +365,4 @@ def _custom_rules(
                 for d, (t, _) in by_staff[s].items():
                     nxt = by_staff[s].get(d + 1)
                     if t == a and nxt and nxt[0] == b:
-                        v(rule.id, severity, f"{label}: {ctx.staff[s].name} {rule.from_shift_id} → {rule.to_shift_id}", s, d + 1, b)
+                        v(rule.id, severity, M("{label}: {name} {a} → {b}", label=label, name=ctx.staff[s].name, a=shift_name.get(rule.from_shift_id, rule.from_shift_id), b=shift_name.get(rule.to_shift_id, rule.to_shift_id)), s, d + 1, b)

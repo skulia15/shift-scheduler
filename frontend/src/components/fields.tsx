@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { CloseIcon } from './icons'
+import { useI18n } from '../i18n'
+import { TrashIcon } from './icons'
 
 export function NumberField({
   value,
@@ -7,12 +8,14 @@ export function NumberField({
   nullable,
   step = 1,
   width,
+  placeholder,
 }: {
   value: number | null
   onChange: (v: number | null) => void
   nullable?: boolean
   step?: number
   width?: number
+  placeholder?: string
 }) {
   return (
     <input
@@ -21,7 +24,7 @@ export function NumberField({
       step={step}
       style={width ? { width } : undefined}
       value={value ?? ''}
-      placeholder={nullable ? 'Off' : ''}
+      placeholder={nullable ? placeholder : ''}
       onChange={(e) => {
         const raw = e.target.value
         if (raw === '') onChange(nullable ? null : 0)
@@ -131,22 +134,24 @@ export function Section({ title, children, hint, action, count }: { title: strin
   )
 }
 
-export function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+export function PageHead({ title, sub, children }: { title: string; sub?: ReactNode; children?: ReactNode }) {
   return (
     <section className="page-head">
-      <div>
-        <p className="eyebrow">{eyebrow}</p>
+      <div className="titles">
         <h1>{title}</h1>
+        {sub && <span className="page-sub">{sub}</span>}
       </div>
-      {children}
+      {children && <div className="page-actions">{children}</div>}
     </section>
   )
 }
 
-export function RemoveButton({ onClick, label = 'Remove' }: { onClick: () => void; label?: string }) {
+export function RemoveButton({ onClick, label }: { onClick: () => void; label?: string }) {
+  const { t } = useI18n()
+  const text = label ?? t('Remove')
   return (
-    <button type="button" className="icon-btn" aria-label={label} title={label} onClick={onClick}>
-      <CloseIcon />
+    <button type="button" className="icon-btn danger" aria-label={text} title={text} onClick={onClick}>
+      <TrashIcon />
     </button>
   )
 }
