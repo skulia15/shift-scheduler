@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
+import { CalendarIcon, SparkleIcon } from './components/icons'
 import { download, usePersisted } from './store'
 import type { Assignment, Evaluation, Project, SolveResult } from './types'
 import { DemandView } from './views/DemandView'
@@ -76,36 +77,47 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar no-print">
-        <input className="title" value={project.name} onChange={(e) => setProject({ ...project, name: e.target.value })} />
-        <nav>
-          {TABS.map((t) => (
-            <button key={t} className={t === tab ? 'tab active' : 'tab'} onClick={() => setTab(t)}>
-              {t}
+        <div className="topbar-inner">
+          <div className="brand">
+            <span className="brand-mark">
+              <CalendarIcon />
+            </span>
+            Vaktaplan
+          </div>
+          <nav className="tabs" aria-label="Sections">
+            {TABS.map((t) => (
+              <button key={t} className={t === tab ? 'active' : ''} onClick={() => setTab(t)}>
+                {t}
+              </button>
+            ))}
+          </nav>
+          <span className="spacer" />
+          <div className="header-actions">
+            <label className="btn on-plum">
+              Open file
+              <input type="file" accept=".json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
+            </label>
+            <button
+              className="btn on-plum"
+              onClick={() => download(`${project.name}.json`, JSON.stringify({ project, roster }, null, 2), 'application/json')}
+            >
+              Save file
             </button>
-          ))}
-        </nav>
-        <div className="actions">
-          <button className="primary" disabled={busy} onClick={generate}>
-            {busy ? `Generating… (≤${project.solve_seconds}s)` : 'Generate roster'}
-          </button>
-          <button onClick={() => download(`${project.name}.json`, JSON.stringify({ project, roster }, null, 2), 'application/json')}>
-            Save file
-          </button>
-          <label className="button">
-            Open file
-            <input type="file" accept=".json" hidden onChange={(e) => e.target.files?.[0] && importJson(e.target.files[0])} />
-          </label>
-          <button onClick={resetToSample}>Demo</button>
+            <button className="btn on-plum" onClick={resetToSample}>
+              Demo
+            </button>
+            <button className="btn lime" disabled={busy} onClick={generate}>
+              <SparkleIcon />
+              {busy ? `Generating… (≤${project.solve_seconds}s)` : 'Generate roster'}
+            </button>
+          </div>
         </div>
       </header>
-      {error && <pre className="error-banner">{error}</pre>}
-      {solveInfo && tab === 'Roster' && (
-        <div className={`solve-info ${solveInfo.status}`}>
-          {solveInfo.message} ({solveInfo.solve_seconds}s)
-        </div>
-      )}
       <main>
-        {tab === 'Roster' && <RosterView project={project} roster={roster} setRoster={setRoster} evaluation={evaluation} />}
+        {error && <pre className="error-banner">{error}</pre>}
+        {tab === 'Roster' && (
+          <RosterView project={project} roster={roster} setRoster={setRoster} evaluation={evaluation} solveInfo={solveInfo} busy={busy} />
+        )}
         {tab === 'Setup' && <SetupView project={project} setProject={setProject} />}
         {tab === 'Demand' && <DemandView project={project} setProject={setProject} />}
         {tab === 'Leave' && <LeaveView project={project} setProject={setProject} />}

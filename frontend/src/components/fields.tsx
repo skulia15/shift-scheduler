@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
+import { CloseIcon } from './icons'
 
 export function NumberField({
   value,
   onChange,
   nullable,
   step = 1,
-  width = 70,
+  width,
 }: {
   value: number | null
   onChange: (v: number | null) => void
@@ -16,10 +17,11 @@ export function NumberField({
   return (
     <input
       type="number"
+      className="num"
       step={step}
-      style={{ width }}
+      style={width ? { width } : undefined}
       value={value ?? ''}
-      placeholder={nullable ? 'off' : ''}
+      placeholder={nullable ? 'Off' : ''}
       onChange={(e) => {
         const raw = e.target.value
         if (raw === '') onChange(nullable ? null : 0)
@@ -29,8 +31,8 @@ export function NumberField({
   )
 }
 
-export function TextField({ value, onChange, width }: { value: string; onChange: (v: string) => void; width?: number }) {
-  return <input value={value} style={{ width }} onChange={(e) => onChange(e.target.value)} />
+export function TextField({ value, onChange, width, className }: { value: string; onChange: (v: string) => void; width?: number; className?: string }) {
+  return <input className={className} value={value} style={width ? { width } : undefined} onChange={(e) => onChange(e.target.value)} />
 }
 
 export function Select<T extends string>({
@@ -53,6 +55,7 @@ export function Select<T extends string>({
   )
 }
 
+/** Multi-select rendered as toggle pills (weekdays, groups, shift types). */
 export function Checks<T extends string | number>({
   values,
   options,
@@ -63,27 +66,87 @@ export function Checks<T extends string | number>({
   onChange: (v: T[]) => void
 }) {
   return (
-    <span className="checks">
-      {options.map((o) => (
-        <label key={String(o.value)}>
-          <input
-            type="checkbox"
-            checked={values.includes(o.value)}
-            onChange={(e) => onChange(e.target.checked ? [...values, o.value] : values.filter((v) => v !== o.value))}
-          />
-          {o.label}
-        </label>
-      ))}
+    <span className="pills">
+      {options.map((o) => {
+        const on = values.includes(o.value)
+        return (
+          <button
+            key={String(o.value)}
+            type="button"
+            aria-pressed={on}
+            className={on ? 'pill-toggle on' : 'pill-toggle'}
+            onClick={() => onChange(on ? values.filter((v) => v !== o.value) : [...values, o.value])}
+          >
+            {o.label}
+          </button>
+        )
+      })}
     </span>
   )
 }
 
-export function Section({ title, children, hint }: { title: string; children: ReactNode; hint?: string }) {
+export function Stepper({
+  value,
+  onChange,
+  nullable,
+  min = 0,
+}: {
+  value: number | null
+  onChange: (v: number | null) => void
+  nullable?: boolean
+  min?: number
+}) {
+  const down = () => {
+    if (value === null) return
+    if (value <= min) onChange(nullable ? null : min)
+    else onChange(value - 1)
+  }
+  return (
+    <span className="stepper">
+      <button type="button" aria-label="Decrease" disabled={value === null || (!nullable && value <= min)} onClick={down}>
+        −
+      </button>
+      <span className={value === null ? 'off' : ''}>{value ?? 'Off'}</span>
+      <button type="button" aria-label="Increase" onClick={() => onChange(value === null ? min : value + 1)}>
+        +
+      </button>
+    </span>
+  )
+}
+
+export function Section({ title, children, hint, action, count }: { title: string; children: ReactNode; hint?: string; action?: ReactNode; count?: number }) {
   return (
     <section className="card">
-      <h2>{title}</h2>
-      {hint && <p className="hint">{hint}</p>}
+      <div className="card-head">
+        <div>
+          <h2>
+            {title} {count !== undefined && <span className="count">{count}</span>}
+          </h2>
+          {hint && <p className="hint">{hint}</p>}
+        </div>
+        {action}
+      </div>
       {children}
     </section>
+  )
+}
+
+export function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+  return (
+    <section className="page-head">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+      </div>
+      {children}
+    </section>
+  )
+}
+
+export function RemoveButton({ onClick, label = 'Remove' }: { onClick: () => void; label?: string }) {
+  return (
+    <button type="button" className="icon-btn" aria-label={label} title={label} onClick={onClick}>
+      <CloseIcon />
+    </button>
   )
 }

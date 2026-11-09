@@ -14,19 +14,19 @@ const OVERLAY = () => {
       transition: transform .12s; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .4)); }
     #demo-cursor.down { transform: scale(.8); }
     .demo-ripple { position: fixed; z-index: 9998; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%;
-      border: 3px solid #2563eb; pointer-events: none; animation: demo-ripple .6s ease-out forwards; }
+      border: 3px solid #8b299b; pointer-events: none; animation: demo-ripple .6s ease-out forwards; }
     @keyframes demo-ripple { from { transform: scale(.3); opacity: 1 } to { transform: scale(1.6); opacity: 0 } }
     #demo-caption { position: fixed; z-index: 9997; left: 50%; bottom: 36px; transform: translateX(-50%); max-width: 1100px;
-      background: rgb(15 23 42 / .92); color: white; padding: 16px 28px; border-radius: 14px; font: 600 24px/1.35 system-ui;
+      background: rgb(55 8 62 / .95); color: #fdf0ff; padding: 16px 28px; border-radius: 14px; font: 600 24px/1.35 Figtree, system-ui;
       text-align: center; box-shadow: 0 10px 30px rgb(0 0 0 / .25); transition: opacity .35s; }
-    #demo-caption small { display: block; font-weight: 400; font-size: 17px; color: #cbd5e1; margin-top: 4px; }
+    #demo-caption small { display: block; font-weight: 400; font-size: 17px; color: #eeadfb; margin-top: 4px; }
     #demo-caption.hidden { opacity: 0; }
     #demo-card { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; text-align: center;
-      background: linear-gradient(135deg, #0f172a, #1e3a8a); color: white; font-family: system-ui; transition: opacity .5s; }
+      background: #37083e; color: #fdf0ff; font-family: Figtree, system-ui; transition: opacity .5s; }
     #demo-card.hidden { opacity: 0; pointer-events: none; }
-    #demo-card h1 { font-size: 54px; margin: 0 0 18px; letter-spacing: -.5px; }
-    #demo-card p { font-size: 24px; color: #bfdbfe; margin: 0; max-width: 1000px; line-height: 1.5; }
-    .demo-ring { outline: 4px solid #f59e0b !important; outline-offset: 3px; border-radius: 6px; transition: outline .2s; }`
+    #demo-card h1 { font-size: 56px; margin: 0 0 18px; letter-spacing: -1px; color: #cede71; }
+    #demo-card p { font-size: 24px; color: #eeadfb; margin: 0; max-width: 1000px; line-height: 1.5; }
+    .demo-ring { outline: 4px solid #cede71 !important; outline-offset: 3px; border-radius: 6px; transition: outline .2s; }`
   const install = () => {
     if (document.getElementById('demo-cursor')) return
     const style = document.createElement('style')
@@ -105,10 +105,10 @@ async function main() {
     localStorage.setItem('tab', '"Setup"')
   })
   await page.reload()
-  await page.waitForSelector('text=Planning period')
+  await page.waitForSelector('text=Period, shifts and people')
   await page.mouse.move(720, 450)
   const demo = (fn, ...args) => page.evaluate(([f, a]) => window.__demo[f](...a), [fn, args])
-  await demo('card', 'Rostering a care unit takes days.', 'Shift Scheduler builds a fair, union-compliant roster in seconds.')
+  await demo('card', 'Rostering a care unit takes days.', 'Vaktaplan builds a fair, union-compliant roster in seconds.')
   const trimStart = (Date.now() - started) / 1000
   await sleep(4500)
   await demo(
@@ -138,17 +138,19 @@ async function main() {
   }
 
   // 1. Setup
-  await demo('caption', '1 · Describe your unit', 'Staff, employment %, who may work nights, shift times, tasks')
+  await demo('caption', '1 · Describe your unit', 'Staff, employment %, who may work nights, shift times, tasks, floors and hallways')
   await sleep(2000)
   await scroll(520)
-  await demo('ring', '.stack > .card:nth-child(4)')
+  await demo('ring', '.col-wide > .card:nth-child(2)')
   await move(page.locator('.form-table input[type=number]').nth(3))
   await sleep(3000)
   await demo('ring', null)
 
   // 2. Demand
   await tab('Demand')
-  await demo('caption', '2 · Say what every shift needs', 'Nurses and floor staff per shift, extra rules for holidays, task needs like bathing or dining room')
+  await demo('caption', '2 · Say what every shift needs', 'Nurses and floor staff per shift and per hallway, holiday exceptions, tasks like bathing or dining room')
+  await sleep(1500)
+  await move(page.locator('.overview').first())
   await sleep(1500)
   await move(page.locator('.form-table').first().locator('tr').nth(4))
   await sleep(2500)
@@ -157,12 +159,12 @@ async function main() {
 
   // 3. Leave
   await tab('Leave')
-  await demo('caption', '3 · Holidays and day-off requests', 'The requests staff already send through MTP — reserved holidays are never touched')
+  await demo('caption', '3 · Holidays and day-off requests', 'Requests collected in MTP, entered here — reserved holidays are never touched')
   await sleep(1500)
-  const requestCell = page.locator('table.roster tbody tr').nth(9).locator('td').nth(12)
+  const requestCell = page.locator('table.roster tbody tr').nth(9).locator('td button').nth(12)
   await move(requestCell, { click: true })
   await sleep(900)
-  await move(page.locator('table.roster tbody tr').nth(3).locator('td').nth(19), { click: true })
+  await move(page.locator('table.roster tbody tr').nth(3).locator('td button').nth(19), { click: true })
   await sleep(400)
   await page.mouse.down()
   await page.mouse.up()
@@ -171,28 +173,28 @@ async function main() {
   // 4. Rules
   await tab('Rules')
   await demo('caption', '4 · Union rules are built in', 'Every limit is editable — and the roster is checked against all of them')
-  await demo('ring', '.form-grid')
+  await demo('ring', '.labor-grid')
   await sleep(4000)
   await demo('ring', null)
   await scroll(700, 10)
-  await demo('caption', '…plus your own planning rules', '“Don’t bathe residents two days running” · “Rotate dining-room duty fairly” · hard or soft')
-  await move(page.locator('.rule').first())
+  await demo('caption', '…plus your own planning rules', '“Lilja always works in Gangur A” · “Petra wants a varied shift mix” · “Rotate dining duty fairly”')
+  await move(page.locator('.rule-card').nth(3))
   await sleep(2000)
-  await move(page.locator('.rule').nth(1))
+  await move(page.locator('.rule-card').nth(4))
   await sleep(2500)
 
   // 5. Generate
   await tab('Roster')
   await demo('caption', '5 · Press Generate', null)
   await sleep(1200)
-  await move(page.locator('button.primary', { hasText: 'Generate roster' }), { click: true })
+  await move(page.locator('button.lime', { hasText: 'Generate roster' }), { click: true })
   await sleep(1500)
   await demo('caption', 'The solver weighs every person, day and rule at once…', '20 staff × 28 days × 3 shifts — solved as one optimisation')
-  await page.waitForSelector('.solve-info', { timeout: 60_000 })
+  await page.waitForSelector('.status-pill:not(.busy)', { timeout: 60_000 })
   await sleep(800)
-  await demo('caption', 'A complete four-week roster', 'Holidays and requests respected · tasks rotated · overtime shared fairly')
-  await demo('ring', '.count.ok')
-  await move(page.locator('.count.ok'))
+  await demo('caption', 'A complete four-week roster', 'Every shift covered · hallways and tasks in each cell · overtime shared fairly')
+  await demo('ring', '.kpi.dark')
+  await move(page.locator('.kpi').nth(1))
   await sleep(3500)
   await demo('ring', null)
   await move(page.locator('table.roster thead th').last())
@@ -217,22 +219,22 @@ async function main() {
     return null
   })
   if (target) {
-    const cell = page.locator(`td[data-staff="${target.staff}"][data-date="${target.date}"]`)
+    const cell = page.locator(`button[data-staff="${target.staff}"][data-date="${target.date}"]`)
     await demo('caption', '6 · Change anything by hand', 'Put someone on a morning shift right after a night…')
     await move(cell, { click: true })
     await sleep(1000)
-    await move(page.locator('.shift-picker button', { hasText: 'Morgunvakt' }), { click: true })
+    await move(page.locator('.shift-option', { hasText: 'Morgunvakt' }), { click: true })
     await sleep(600)
-    await move(page.locator('.modal-actions button.primary'), { click: true })
+    await move(page.locator('.modal-actions .btn.plum'), { click: true })
     await sleep(1200)
     await move(cell)
     await demo('caption', '…and it is flagged instantly', 'Only 0 hours rest after a night shift — the rule check explains every problem')
     await sleep(3000)
     await move(cell, { click: true })
     await sleep(1800)
-    await move(page.locator('.shift-picker button', { hasText: 'Off' }), { click: true })
+    await move(page.locator('.shift-option', { hasText: 'Off' }), { click: true })
     await sleep(400)
-    await move(page.locator('.modal-actions button.primary'), { click: true })
+    await move(page.locator('.modal-actions .btn.plum'), { click: true })
     await sleep(800)
   }
 
@@ -241,7 +243,7 @@ async function main() {
   await demo('caption', 'Coverage for every shift at a glance', 'Assigned vs. required nurses and floor staff, every day')
   await sleep(3500)
   await scroll(-450, 6)
-  await demo('caption', '7 · Export and publish', 'CSV or print — then publish in MTP as usual')
+  await demo('caption', '7 · Export and publish', 'CSV or print — then enter it in MTP as usual')
   await move(page.locator('button', { hasText: 'Export CSV' }))
   await sleep(3000)
   await demo('caption', null)

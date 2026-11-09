@@ -15,3 +15,14 @@ export function weekday(date: ISODate): number {
 export function shortDate(date: ISODate): string {
   return `${Number(date.slice(8))}.${Number(date.slice(5, 7))}`
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** '2026-12-09' -> '9 Dec' */
+export function longDate(date: ISODate): string {
+  return `${Number(date.slice(8))} ${MONTHS[Number(date.slice(5, 7)) - 1]}`
+}
+
+export function monthShort(date: ISODate): string {
+  return MONTHS[Number(date.slice(5, 7)) - 1].toUpperCase()
+}
