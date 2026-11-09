@@ -77,7 +77,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
   const errorCount = all.filter((v) => v.severity === 'error').length
   const warningCount = all.length - errorCount
   const violations = all.filter((v) => filter === 'all' || v.severity === filter)
-  const shiftCoverage = (evaluation?.coverage ?? []).filter((c) => !c.area_id)
+  const shiftCoverage = (evaluation?.coverage ?? []).filter((c) => !c.area_id && !c.competence_id)
   const coverageMet = shiftCoverage.filter((c) => c.assigned >= c.required).length
   const shortDays = new Set(shiftCoverage.filter((c) => c.assigned < c.required).map((c) => c.date))
   const groupCounts = project.groups.map((g) => `${project.staff.filter((s) => s.group_ids[0] === g.id).length} ${g.name}`)
@@ -245,7 +245,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                       label={`${shift.code} · ${g.name}`}
                       dates={dates}
                       holidays={holidays}
-                      cells={(evaluation?.coverage ?? []).filter((c) => c.shift_id === shift.id && c.group_id === g.id && !c.area_id)}
+                      cells={(evaluation?.coverage ?? []).filter((c) => c.shift_id === shift.id && c.group_id === g.id && !c.area_id && !c.competence_id)}
                     />
                   )),
                 )}
@@ -258,6 +258,21 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                         dates={dates}
                         holidays={holidays}
                         cells={(evaluation?.coverage ?? []).filter((c) => c.area_id === area.id && c.shift_id === shift.id && c.group_id === g.id)}
+                      />
+                    )),
+                  ),
+                )}
+                {project.competences.flatMap((comp) =>
+                  [null, ...project.areas].flatMap((area) =>
+                    project.shift_types.map((shift) => (
+                      <CoverageRow
+                        key={`${comp.id}-${area?.id ?? 'all'}-${shift.id}`}
+                        label={`${comp.name}${area ? ` · ${area.name}` : ''} · ${shift.code}`}
+                        dates={dates}
+                        holidays={holidays}
+                        cells={(evaluation?.coverage ?? []).filter(
+                          (c) => c.competence_id === comp.id && c.shift_id === shift.id && (c.area_id ?? null) === (area?.id ?? null),
+                        )}
                       />
                     )),
                   ),
@@ -369,7 +384,7 @@ function CellEditor({
   const [shiftId, setShiftId] = useState<string | null>(assignment?.shift_id ?? null)
   const [taskId, setTaskId] = useState<string>(assignment?.task_ids[0] ?? '')
   const [areaId, setAreaId] = useState<string>(assignment?.area_id ?? '')
-  const tasks = project.tasks.filter((t) => staff.group_ids.includes(t.group_id))
+  const tasks = project.tasks.filter((t) => staff.group_ids.includes(t.group_id) && (!t.competence_id || staff.competence_ids.includes(t.competence_id)))
   const group = project.groups.find((g) => g.id === staff.group_ids[0])
   const dayName = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][weekday(date)]
 

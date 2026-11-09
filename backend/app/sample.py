@@ -8,6 +8,8 @@ from .holidays import holidays_between
 from .models import (
     Area,
     AreaDemand,
+    Competence,
+    CompetenceDemand,
     DiverseShiftsRule,
     FixedAreaRule,
     AvoidTaskRepeatRule,
@@ -53,11 +55,23 @@ def sample_project() -> Project:
         ("Ýr", 80, None),
         ("Örn", 100, None),
     ]
+    # Sjúkraliðar with medication rights; floor staff still learning Icelandic.
+    medication = {"Lilja", "Ólafur", "Sigríður", "Örn"}
+    no_icelandic = {"Ragnar", "Tómas", "Ýr"}
     staff = [
-        Staff(id=f"n{i}", name=name, group_ids=["nurse"], employment_percent=pct, allowed_shift_ids=allowed)
+        Staff(
+            id=f"n{i}", name=name, group_ids=["nurse"], employment_percent=pct, allowed_shift_ids=allowed, competence_ids=["med", "is"]
+        )
         for i, (name, pct, allowed) in enumerate(nurses, 1)
     ] + [
-        Staff(id=f"f{i}", name=name, group_ids=["floor"], employment_percent=pct, allowed_shift_ids=allowed)
+        Staff(
+            id=f"f{i}",
+            name=name,
+            group_ids=["floor"],
+            employment_percent=pct,
+            allowed_shift_ids=allowed,
+            competence_ids=(["med"] if name in medication else []) + ([] if name in no_icelandic else ["is"]),
+        )
         for i, (name, pct, allowed) in enumerate(floor, 1)
     ]
 
@@ -74,7 +88,7 @@ def sample_project() -> Project:
         tasks=[
             Task(id="bath", name="Böðun", group_id="floor"),
             Task(id="dining", name="Matsalur", group_id="floor"),
-            Task(id="meds", name="Lyfjaumsjón", group_id="nurse"),
+            Task(id="meds", name="Lyfjaumsjón", group_id="nurse", competence_id="med"),
         ],
         coverage=[
             CoverageDemand(shift_id="M", group_id="nurse", min=1, max=2),
@@ -101,6 +115,16 @@ def sample_project() -> Project:
             AreaDemand(area_id="A", shift_id="K", group_id="floor", min=1),
             AreaDemand(area_id="B", shift_id="K", group_id="floor", min=1),
             AreaDemand(area_id="A", shift_id="M", group_id="floor", dates=[date(2026, 12, 24), date(2026, 12, 25)], min=1),
+        ],
+        competences=[Competence(id="med", name="Lyfjaréttindi"), Competence(id="is", name="Íslenska")],
+        competence_demand=[
+            # Two Icelandic speakers on day and evening shifts, one at night.
+            CompetenceDemand(competence_id="is", shift_id="M", min=2),
+            CompetenceDemand(competence_id="is", shift_id="K", min=2),
+            CompetenceDemand(competence_id="is", shift_id="N", min=1),
+            # Someone with medication rights in each hallway in the morning.
+            CompetenceDemand(competence_id="med", shift_id="M", area_id="A", min=1),
+            CompetenceDemand(competence_id="med", shift_id="M", area_id="B", min=1),
         ],
         leave=[
             Leave(staff_id="n1", start=date(2026, 12, 21), end=date(2026, 12, 27), kind="holiday", note="Jólafrí"),

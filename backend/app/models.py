@@ -57,12 +57,33 @@ class Staff(BaseModel):
     employment_percent: float = Field(100, ge=0, le=100, description="Starfshlutfall")
     allowed_shift_ids: list[str] | None = Field(None, description="None = any shift type")
     target_hours_override: float | None = Field(None, description="Hours for the whole period")
+    competence_ids: list[str] = Field(default_factory=list, description="e.g. medication rights, Icelandic")
+
+
+class Competence(BaseModel):
+    """A skill that cuts across staff groups (Lyfjaréttindi, Íslenska, Vaktstjóri…)."""
+
+    id: str
+    name: str
 
 
 class Task(BaseModel):
     id: str
     name: str
     group_id: str
+    competence_id: str | None = Field(None, description="Only people with this competence may do the task")
+
+
+class CompetenceDemand(BaseModel):
+    """At least `min` people with a competence on a shift — in one area, or anywhere when area_id is None.
+    `dates` entries override weekday entries."""
+
+    competence_id: str
+    shift_id: str
+    area_id: str | None = None
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)))
+    dates: list[date] | None = None
+    min: int = 1
 
 
 class CoverageDemand(BaseModel):
@@ -293,6 +314,8 @@ class Project(BaseModel):
     task_demand: list[TaskDemand] = []
     areas: list[Area] = []
     area_demand: list[AreaDemand] = []
+    competences: list[Competence] = []
+    competence_demand: list[CompetenceDemand] = []
     leave: list[Leave] = []
     public_holidays: list[PublicHoliday] = []
     rules: LaborRules = LaborRules()
@@ -323,6 +346,15 @@ class Project(BaseModel):
             if lv.staff_id not in staff_ids:
                 problems.append(f"leave: unknown staff {lv.staff_id}")
         area_ids = {a.id for a in self.areas}
+        competence_ids = {c.id for c in self.competences}
+        for st in self.staff:
+            problems += [f"staff {st.id}: unknown competence {c}" for c in st.competence_ids if c not in competence_ids]
+        for t in self.tasks:
+            if t.competence_id is not None and t.competence_id not in competence_ids:
+                problems.append(f"task {t.id}: unknown competence {t.competence_id}")
+        for cd in self.competence_demand:
+            if cd.competence_id not in competence_ids or cd.shift_id not in shift_ids or (cd.area_id and cd.area_id not in area_ids):
+                problems.append(f"competence demand {cd.competence_id}/{cd.shift_id}: unknown competence, shift or area")
         for ad in self.area_demand:
             if ad.area_id not in area_ids or ad.shift_id not in shift_ids or ad.group_id not in group_ids:
                 problems.append(f"area demand {ad.area_id}/{ad.shift_id}/{ad.group_id}: unknown area, shift or group")
@@ -370,8 +402,9 @@ class StaffStats(BaseModel):
 class CoverageCell(BaseModel):
     date: DateT
     shift_id: str
-    group_id: str
+    group_id: str | None = None
     area_id: str | None = None
+    competence_id: str | None = None
     required: int
     assigned: int
 

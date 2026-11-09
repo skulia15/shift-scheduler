@@ -65,7 +65,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 
 | # | Feature | Why (evidence) | App today |
 |---|---|---|---|
-| F1 | Competence tags across groups (nurse, medication-competent, Icelandic speaker, can lead a shift) with per-shift/area minimums | Skill mix is Iceland's main gap: audits found 12–15% nurses vs. 20% floor / 27% target (Landlæknir 2015) | ❌ groups only |
+| F1 | Competence tags across groups (nurse, medication-competent, Icelandic speaker, can lead a shift) with per-shift/area minimums | Skill mix is Iceland's main gap: audits found 12–15% nurses vs. 20% floor / 27% target (Landlæknir 2015) | ✅ competences per person, per-shift/area minimums, tasks that require a competence |
 | F2 | Sick-call re-plan: minimal-change re-solve + ranked replacement list with change fee | ~1 in 3 shifts differs from the posted roster; filling holes is improvised | ❌ |
 | F3 | Fairness ledger across periods (weekends, nights, Christmas/New Year, short-notice changes, denied wishes) | Holiday work must be spread evenly; fairness is judged over the year, not 4 weeks | ❌ per period only |
 | F4 | Stable coworkers / continuity: home area weighted toward part-timers, penalty for changing teams, continuity KPI | Coworker churn raises turnover; part-timer home-unit priority cut aides per resident 20–30% | ⚠️ fixed-area rule |
@@ -81,7 +81,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 1. ~~**Correct the defaults**~~ (done): W11 soft + consecutive, W10 35 h weekly rest, W7 weekly cap on
    8 h rests, W9 normal shift length, W2 165% band, agreement profiles.
 2. ~~**Holiday calendar** (W5/W17)~~ (done): generate Icelandic holidays for any period; duty reduction applied automatically.
-3. **Competence tags** (F1) — highest care-quality impact.
+3. ~~**Competence tags** (F1)~~ (done) — highest care-quality impact.
 4. **Prior-period carry-over** (F10) and **fairness ledger** (F3) — both need history, so build them together.
 5. **Publishing + change log + sick-call re-plan** (F6, W19, F2).
 6. **Vaktahvati and shift-worker indicators** (W21, W22) — pay-relevant, visible to staff.

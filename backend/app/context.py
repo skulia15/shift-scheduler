@@ -64,7 +64,12 @@ class Context:
     task_group: dict[str, str] = field(default_factory=dict)
     area_need: dict[tuple[int, int, str, str], tuple[int, int | None]] = field(default_factory=dict)  # (d, t, area, group)
     fixed_area: dict[int, str] = field(default_factory=dict)  # staff -> area (enabled fixed_area rules)
+    competence_need: dict[tuple[int, int, str, str | None], int] = field(default_factory=dict)  # (d, t, competence, area)
+    task_competence: dict[str, str | None] = field(default_factory=dict)
     area_groups: set[tuple[int, int, str]] = field(default_factory=set)  # (d, t, group) with any area demand
+
+    def has_competence(self, staff: int, competence_id: str | None) -> bool:
+        return competence_id is None or competence_id in self.staff[staff].competence_ids
 
     def needs_area(self, staff: int, day: int, shift: int) -> bool:
         """Whether this person, if working this shift, must be placed in an area."""
@@ -235,6 +240,19 @@ def build_context(project: Project) -> Context:
             if is_override:
                 overridden_areas.add(key)
             ctx.area_need[key] = (ad.min, ad.max)
+
+    overridden_competences: set[tuple[int, int, str, str | None]] = set()
+    for cd in project.competence_demand:
+        t = ctx.shift_index[cd.shift_id]
+        for d, day in enumerate(dates):
+            applies, is_override = _demand_applies(cd.weekdays, cd.dates, day)
+            key = (d, t, cd.competence_id, cd.area_id)
+            if not applies or (key in overridden_competences and not is_override):
+                continue
+            if is_override:
+                overridden_competences.add(key)
+            ctx.competence_need[key] = cd.min
+    ctx.task_competence = {t.id: t.competence_id for t in project.tasks}
 
     ctx.area_groups = {(d, t, g) for (d, t, _, g) in ctx.area_need}
     for rule in project.custom_rules:

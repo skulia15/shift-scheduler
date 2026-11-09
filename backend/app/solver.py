@@ -73,7 +73,7 @@ class _Model:
         for (d, t, task_id), _need in ctx.task_need.items():
             group = ctx.task_group[task_id]
             for s in range(S):
-                if (s, d, t) in self.work and ctx.in_group(s, group):
+                if (s, d, t) in self.work and ctx.in_group(s, group) and ctx.has_competence(s, ctx.task_competence[task_id]):
                     var = m.new_bool_var(f"k{s}_{d}_{t}_{task_id}")
                     m.add_implication(var, self.work[s, d, t])
                     self.task[s, d, t, task_id] = var
@@ -110,6 +110,16 @@ class _Model:
             self._at_least(n, lo)
             if hi is not None:
                 m.add(n <= hi)
+
+        # Competences: enough people with a skill on the shift (or in an area of it).
+        for (d, t, comp, area_id), lo in ctx.competence_need.items():
+            if area_id is None:
+                n = sum(v for (s, dd, tt), v in self.work.items() if dd == d and tt == t and ctx.has_competence(s, comp))
+            else:
+                n = sum(
+                    v for (s, dd, tt, a), v in self.area.items() if dd == d and tt == t and a == area_id and ctx.has_competence(s, comp)
+                )
+            self._at_least(n, lo)
 
         # Rest between consecutive shifts.
         shorts: dict[tuple[int, int], list[cp_model.IntVar]] = {}  # (staff, day of the later shift)

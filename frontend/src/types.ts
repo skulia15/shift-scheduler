@@ -24,12 +24,28 @@ export interface Staff {
   employment_percent: number
   allowed_shift_ids: string[] | null
   target_hours_override: number | null
+  competence_ids: string[]
+}
+
+export interface Competence {
+  id: string
+  name: string
+}
+
+export interface CompetenceDemand {
+  competence_id: string
+  shift_id: string
+  area_id: string | null
+  weekdays: number[]
+  dates: ISODate[] | null
+  min: number
 }
 
 export interface Task {
   id: string
   name: string
   group_id: string
+  competence_id: string | null
 }
 
 export interface CoverageDemand {
@@ -156,6 +172,8 @@ export interface Project {
   task_demand: TaskDemand[]
   areas: Area[]
   area_demand: AreaDemand[]
+  competences: Competence[]
+  competence_demand: CompetenceDemand[]
   leave: Leave[]
   public_holidays: PublicHoliday[]
   rules: LaborRules
@@ -198,8 +216,9 @@ export interface StaffStats {
 export interface CoverageCell {
   date: ISODate
   shift_id: string
-  group_id: string
+  group_id: string | null
   area_id: string | null
+  competence_id: string | null
   required: number
   assigned: number
 }

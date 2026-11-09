@@ -66,6 +66,22 @@ export function SetupView({ project: p, setProject }: Props) {
                     t.group_id !== g.id ? null : (
                       <span key={t.id} className="chip-input">
                         <input aria-label="Task name" value={t.name} onChange={(e) => set({ tasks: patchAt(p.tasks, ti, { name: e.target.value }) })} />
+                        {p.competences.length > 0 && (
+                          <select
+                            aria-label="Required competence"
+                            title="Only people with this competence may do the task"
+                            className="chip-select"
+                            value={t.competence_id ?? ''}
+                            onChange={(e) => set({ tasks: patchAt(p.tasks, ti, { competence_id: e.target.value || null }) })}
+                          >
+                            <option value="">anyone</option>
+                            {p.competences.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                needs {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                         <button
                           type="button"
                           className="icon-btn"
@@ -80,7 +96,7 @@ export function SetupView({ project: p, setProject }: Props) {
                   <button
                     type="button"
                     className="dashed-btn"
-                    onClick={() => set({ tasks: [...p.tasks, { id: newId('task', p.tasks), name: 'New task', group_id: g.id }] })}
+                    onClick={() => set({ tasks: [...p.tasks, { id: newId('task', p.tasks), name: 'New task', group_id: g.id, competence_id: null }] })}
                   >
                     + Task
                   </button>
@@ -116,6 +132,35 @@ export function SetupView({ project: p, setProject }: Props) {
                       areas: removeAt(p.areas, i),
                       area_demand: p.area_demand.filter((d) => d.area_id !== a.id),
                       custom_rules: p.custom_rules.filter((r) => !(r.type === 'fixed_area' && r.area_id === a.id)),
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </Section>
+
+          <Section
+            title="Competences"
+            hint="Skills that cut across groups. Tick them per person in Staff; set minimums under Demand."
+            action={
+              <button className="btn add" onClick={() => set({ competences: [...p.competences, { id: newId('comp', p.competences), name: 'New competence' }] })}>
+                + Competence
+              </button>
+            }
+          >
+            {p.competences.length === 0 && <p className="empty">None yet — e.g. Lyfjaréttindi, Íslenska, Vaktstjóri.</p>}
+            {p.competences.map((c, i) => (
+              <div key={c.id} className="row">
+                <TextField value={c.name} onChange={(name) => set({ competences: patchAt(p.competences, i, { name }) })} />
+                <span className="muted">{p.staff.filter((s) => s.competence_ids.includes(c.id)).length} people</span>
+                <RemoveButton
+                  label="Remove competence"
+                  onClick={() =>
+                    set({
+                      competences: removeAt(p.competences, i),
+                      competence_demand: p.competence_demand.filter((d) => d.competence_id !== c.id),
+                      staff: p.staff.map((s) => ({ ...s, competence_ids: s.competence_ids.filter((x) => x !== c.id) })),
+                      tasks: p.tasks.map((t) => (t.competence_id === c.id ? { ...t, competence_id: null } : t)),
                     })
                   }
                 />
@@ -261,6 +306,7 @@ export function SetupView({ project: p, setProject }: Props) {
                         employment_percent: 100,
                         allowed_shift_ids: null,
                         target_hours_override: null,
+                        competence_ids: [],
                       },
                     ],
                   })
@@ -278,6 +324,7 @@ export function SetupView({ project: p, setProject }: Props) {
                     <th>Group</th>
                     <th>Employment</th>
                     <th>May work</th>
+                    {p.competences.length > 0 && <th>Competences</th>}
                     <th title="Contract hours for the whole period, instead of employment %">Hours override</th>
                     <th />
                   </tr>
@@ -309,6 +356,15 @@ export function SetupView({ project: p, setProject }: Props) {
                           onChange={(ids) => set({ staff: patchAt(p.staff, i, { allowed_shift_ids: ids.length ? ids : null }) })}
                         />
                       </td>
+                      {p.competences.length > 0 && (
+                        <td>
+                          <Checks
+                            values={s.competence_ids}
+                            options={p.competences.map((c) => ({ value: c.id, label: c.name }))}
+                            onChange={(competence_ids) => set({ staff: patchAt(p.staff, i, { competence_ids }) })}
+                          />
+                        </td>
+                      )}
                       <td>
                         <NumberField width={80} nullable value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, i, { target_hours_override: v }) })} />
                       </td>

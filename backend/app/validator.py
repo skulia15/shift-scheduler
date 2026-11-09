@@ -100,6 +100,8 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 v("unknown_reference", "error", f"Unknown task {task_id}", s, d, t)
             elif not ctx.in_group(s, ctx.task_group[task_id]):
                 v("task_group", "error", f"{name} is not in the group that does {task_id}", s, d, t)
+            elif not ctx.has_competence(s, ctx.task_competence[task_id]):
+                v("task_competence", "error", f"{name} lacks {ctx.task_competence[task_id]} needed for {task_id}", s, d, t)
         area = area_of[(s, d)]
         if area is not None and area not in {x.id for x in ctx.project.areas}:
             v("unknown_reference", "error", f"Unknown area {area}", s, d, t)
@@ -138,6 +140,20 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             v("area_coverage", "error", f"{area_id} {group_id}: {n} of {lo} required", d=d, t=t)
         if hi is not None and n > hi:
             v("area_coverage", "error", f"{area_id} {group_id}: {n} exceeds maximum {hi}", d=d, t=t)
+
+    competence_name = {c.id: c.name for c in ctx.project.competences}
+    for (d, t, comp, area_id), lo in sorted(ctx.competence_need.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2], kv[0][3] or "")):
+        n = sum(
+            1
+            for (s, dd), (tt, _) in work.items()
+            if dd == d and tt == t and ctx.has_competence(s, comp) and (area_id is None or area_of[(s, dd)] == area_id)
+        )
+        cells.append(
+            CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, competence_id=comp, area_id=area_id, required=lo, assigned=n)
+        )
+        if n < lo:
+            where = f" in {area_id}" if area_id else ""
+            v("competence", "error", f"{competence_name.get(comp, comp)}{where}: {n} of {lo} required", d=d, t=t)
 
     if rules.lone_night_warning:
         for d in range(ctx.n_days):

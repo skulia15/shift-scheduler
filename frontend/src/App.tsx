@@ -27,6 +27,10 @@ export default function App() {
             ...stored,
             areas: stored.areas ?? [],
             area_demand: stored.area_demand ?? [],
+            competences: stored.competences ?? [],
+            competence_demand: stored.competence_demand ?? [],
+            staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [] })),
+            tasks: stored.tasks.map((t) => ({ ...t, competence_id: t.competence_id ?? null })),
             rules: { ...defaults.rules, ...stored.rules },
             weights: { ...defaults.weights, ...stored.weights },
           }

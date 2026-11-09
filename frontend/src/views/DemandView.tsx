@@ -225,6 +225,69 @@ export function DemandView({ project: p, setProject }: Props) {
       </Section>
 
       <Section
+        title="Competence per shift"
+        hint="At least this many people with a skill on the shift — anywhere on the unit, or in one area. Date rows override weekday rows."
+        action={
+          <button
+            className="btn add"
+            disabled={!p.competences.length}
+            onClick={() =>
+              set({
+                competence_demand: [
+                  ...p.competence_demand,
+                  { competence_id: p.competences[0].id, shift_id: p.shift_types[0]?.id ?? '', area_id: null, weekdays: ALL_DAYS, dates: null, min: 1 },
+                ],
+              })
+            }
+          >
+            + Competence row
+          </button>
+        }
+      >
+        {p.competences.length === 0 ? (
+          <p className="empty">Add competences under Setup (e.g. Lyfjaréttindi, Íslenska).</p>
+        ) : (
+          <Table head={['Competence', 'Shift', 'Where', 'Weekdays', 'Specific dates', 'At least']}>
+            {p.competence_demand.map((cd, i) => {
+              const patch = (v: Partial<typeof cd>) => set({ competence_demand: patchAt(p.competence_demand, i, v) })
+              return (
+                <tr key={`${i}-${cd.dates?.join() ?? ''}`}>
+                  <td>
+                    <Options value={cd.competence_id} items={p.competences.map((c) => ({ id: c.id, label: c.name }))} onChange={(competence_id) => patch({ competence_id })} />
+                  </td>
+                  <td>
+                    <span className="row" style={{ flexWrap: 'nowrap' }}>
+                      <ShiftLabel project={p} shiftId={cd.shift_id} />
+                      <Options value={cd.shift_id} items={shifts} onChange={(shift_id) => patch({ shift_id })} />
+                    </span>
+                  </td>
+                  <td>
+                    <Options
+                      value={cd.area_id ?? ''}
+                      items={[{ id: '', label: 'Whole unit' }, ...p.areas.map((a) => ({ id: a.id, label: a.name }))]}
+                      onChange={(area_id) => patch({ area_id: area_id || null })}
+                    />
+                  </td>
+                  <td>
+                    <Checks values={cd.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />
+                  </td>
+                  <td>
+                    <DatesField value={cd.dates} onChange={(dates) => patch({ dates })} />
+                  </td>
+                  <td>
+                    <Stepper value={cd.min} onChange={(v) => patch({ min: v ?? 0 })} />
+                  </td>
+                  <td className="right">
+                    <RemoveButton label="Remove row" onClick={() => set({ competence_demand: removeAt(p.competence_demand, i) })} />
+                  </td>
+                </tr>
+              )
+            })}
+          </Table>
+        )}
+      </Section>
+
+      <Section
         title="Task needs"
         hint="People per task on a shift. Each person does at most one task per shift."
         action={

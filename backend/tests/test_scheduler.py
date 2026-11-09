@@ -6,6 +6,10 @@ import pytest
 from app.context import credited_minutes
 from app.holidays import easter_sunday, holidays_between, icelandic_holidays
 from app.models import (
+    Competence,
+    CompetenceDemand,
+    Task,
+    TaskDemand,
     Area,
     AreaDemand,
     DiverseShiftsRule,
@@ -237,3 +241,33 @@ def test_christmas_roster_target_matches_worked_example():
         public_holidays=holidays_between(start, 28),
     )
     assert evaluate(project, []).staff[0].target_hours == 122.4
+
+
+def competence_project(**overrides) -> Project:
+    staff = [Staff(id=f"s{i}", name=f"S{i}", group_ids=["g"], competence_ids=["med"] if i < 2 else []) for i in range(6)]
+    return small_project(staff=staff, competences=[Competence(id="med", name="Medication")], **overrides)
+
+
+def test_task_requiring_a_competence_goes_only_to_people_with_it():
+    project = competence_project(
+        tasks=[Task(id="meds", name="Meds", group_id="g", competence_id="med")],
+        task_demand=[TaskDemand(task_id="meds", shift_id="D", count=1)],
+    )
+    result = solve(project)
+    doers = {a.staff_id for a in result.roster if "meds" in a.task_ids}
+    assert doers and doers <= {"s0", "s1"}
+    assert errors(result) == []
+
+
+def test_competence_minimum_is_met_on_every_shift():
+    project = competence_project(competence_demand=[CompetenceDemand(competence_id="med", shift_id="D", min=1)])
+    result = solve(project)
+    assert errors(result) == []
+    day_shift_people = Counter(a.date for a in result.roster if a.shift_id == "D" and a.staff_id in ("s0", "s1"))
+    assert len(day_shift_people) == 14
+
+
+def test_validator_flags_missing_competence():
+    project = competence_project(competence_demand=[CompetenceDemand(competence_id="med", shift_id="D", min=1)])
+    roster = [Assignment(staff_id="s4", date=START, shift_id="D")]
+    assert "competence" in {v.rule for v in evaluate(project, roster).violations if v.severity == "error"}
