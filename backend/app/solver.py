@@ -141,6 +141,19 @@ class _Model:
                             m.add_bool_or([a.Not(), b.Not(), short])
                             self.penalise(short, w.short_rest * OCCURRENCE)
                             shorts.setdefault((s, d + 1), []).append(short)
+            # The previous roster's last shift against day 0.
+            t1 = ctx.history.get((s, -1))
+            if t1 is not None:
+                for t2 in ctx.eligible[s]:
+                    b = self.work.get((s, 0, t2))
+                    if b is None:
+                        continue
+                    rest = ctx.rest_minutes(-1, t1, 0, t2)
+                    if rest < rules.min_rest_hours_absolute * 60:
+                        m.add(b == 0)
+                    elif rest < rules.min_rest_hours * 60:
+                        self.penalise(b, w.short_rest * OCCURRENCE)
+                        shorts.setdefault((s, 0), []).append(b)
 
         # Short rests are allowed only occasionally: a soft cap per Mon–Sun week.
         if rules.max_short_rests_per_week is not None:
@@ -151,16 +164,19 @@ class _Model:
                         self.soft_le(sum(used), rules.max_short_rests_per_week, False, w.short_rest_excess, len(used))
 
         overtimes: list[cp_model.IntVar] = []
+        weekends_worked: dict[int, cp_model.LinearExprT] = {}
+        holiday_load: dict[int, cp_model.LinearExprT] = {}
         for s in range(S):
+            H = ctx.history_days
             if rules.max_consecutive_days is not None:
                 k = rules.max_consecutive_days
-                for d in range(D - k):
-                    m.add(sum(self.day_work[s, d + i] for i in range(k + 1)) <= k)
+                for d in range(-min(H, k), D - k):
+                    m.add(sum(self._day(s, d + i) for i in range(k + 1)) <= k)
             if rules.max_consecutive_nights is not None:
                 k = rules.max_consecutive_nights
                 nights = [t for t in range(T) if ctx.shifts[t].is_night]
-                for d in range(D - k):
-                    m.add(sum(self.work.get((s, d + i, t), 0) for i in range(k + 1) for t in nights) <= k)
+                for d in range(-min(H, k), D - k):
+                    m.add(sum(self._lit(s, d + i, t) for i in range(k + 1) for t in nights) <= k)
             if rules.weekly_rest_hours is not None:
                 self._weekly_rest(s, rules.weekly_rest_hours * 60)
             if rules.days_off_per_week:
@@ -195,15 +211,22 @@ class _Model:
                 if (s, d) in ctx.request:
                     self.penalise(self.day_work[s, d], w.request_denied * OCCURRENCE)
 
+            flags = []
+            for wk in ctx.weekends():
+                flag = m.new_bool_var("")
+                for d in wk:
+                    m.add(flag >= self.day_work[s, d])
+                flags.append(flag)
+            weekends_worked[s] = sum(flags)
             allowed = ctx.allowed_weekends()
             if allowed is not None:
-                flags = []
-                for wk in ctx.weekends():
-                    flag = m.new_bool_var("")
-                    for d in wk:
-                        m.add(flag >= self.day_work[s, d])
-                    flags.append(flag)
                 self.soft_le(sum(flags), allowed, hard=False, weight=w.weekend_excess, ub=len(flags))
+            holiday_load[s] = sum(self.day_work[s, d] * (2 if d in ctx.major_days else 1) for d in ctx.holiday_days)
+
+        # Fairness over time: the most-loaded person's running total (earlier periods + this one, per 100% FTE).
+        self._fair_share(weekends_worked, lambda e: e.weekends, w.weekend_fairness, len(ctx.weekends()))
+        if ctx.holiday_days:
+            self._fair_share(holiday_load, lambda e: e.holiday_shifts + e.major_holiday_shifts, w.holiday_fairness, 2 * len(ctx.holiday_days))
 
         if overtimes and w.overtime_spread:
             worst = m.new_int_var(0, D * 24 * 60, "worst_overtime")
@@ -219,24 +242,65 @@ class _Model:
         if not isinstance(expr, int):
             self.m.add(expr == 0).only_enforce_if(literal)
 
-    def _weekly_rest(self, s: int, minutes: float) -> None:
-        """Every 7-day window holds a day off whose surrounding rest is at least `minutes`."""
+    def _fair_share(self, current: dict[int, cp_model.LinearExprT], prior_of, weight: int, max_now: int) -> None:
+        """Per staff group, penalise the highest (prior + current) load per 100% FTE."""
         ctx, m = self.ctx, self.m
-        D = ctx.n_days
-        rested: list[cp_model.IntVar] = []
-        for x in range(D):
+        if not weight:
+            return
+        for g in ctx.project.groups:
+            loads, ub = [], 1
+            for s, member in enumerate(ctx.staff):
+                if member.group_ids[:1] != [g.id] or member.employment_percent <= 0:
+                    continue
+                prior = prior_of(ctx.prior[s]) if s in ctx.prior else 0
+                scale = round(1000 / member.employment_percent)  # tenths of a unit per 100% FTE
+                loads.append((prior + current[s]) * scale)
+                ub = max(ub, (prior + max_now) * scale)
+            if len(loads) < 2:
+                continue
+            worst = m.new_int_var(0, ub, "")
+            for load in loads:
+                m.add(worst >= load)
+            self.penalise(worst, weight * OCCURRENCE // 10 or 1)
+
+    def _lit(self, s: int, d: int, t: int):
+        """Works shift t on day d: a variable inside the period, a 0/1 constant from history before it."""
+        if d < 0:
+            return int(self.ctx.history.get((s, d)) == t)
+        return self.work.get((s, d, t), 0)
+
+    def _day(self, s: int, d: int):
+        if d < 0:
+            return int((s, d) in self.ctx.history)
+        return self.day_work[s, d]
+
+    def _weekly_rest(self, s: int, minutes: float) -> None:
+        """Every 7-day window (reaching back into history) holds a day off with ≥ `minutes` rest around it."""
+        ctx, m = self.ctx, self.m
+        D, H, T = ctx.n_days, ctx.history_days, len(ctx.shifts)
+        rested: dict[int, cp_model.LinearExprT] = {}
+        for x in range(-H, D):
+            if x < 0 and (s, x) in ctx.history:
+                rested[x] = 0
+                continue
             r = m.new_bool_var(f"rest{s}_{x}")
-            self._off_if(s, x, r)
-            if 0 < x < D - 1:
-                for t1 in ctx.eligible[s]:
-                    a = self.work.get((s, x - 1, t1))
-                    for t2 in ctx.eligible[s]:
-                        b = self.work.get((s, x + 1, t2))
-                        if a is not None and b is not None and ctx.rest_around(x, (x - 1, t1), (x + 1, t2)) < minutes:
-                            m.add_bool_or([r.Not(), a.Not(), b.Not()])
-            rested.append(r)
-        for start in range(D - 6):
-            m.add(sum(rested[start : start + 7]) >= 1)
+            if x >= 0:
+                self._off_if(s, x, r)
+            if -H < x < D - 1:
+                for t1 in range(T):
+                    a = self._lit(s, x - 1, t1)
+                    if isinstance(a, int) and a == 0:
+                        continue
+                    for t2 in range(T):
+                        b = self._lit(s, x + 1, t2)
+                        if isinstance(b, int) and b == 0:
+                            continue
+                        if ctx.rest_around(x, (x - 1, t1), (x + 1, t2)) < minutes:
+                            m.add_bool_or([r.Not()] + [lit.Not() for lit in (a, b) if not isinstance(lit, int)])
+            rested[x] = r
+        for start in range(-H, D - 6):
+            if start + 6 >= 0:
+                m.add(sum(rested[x] for x in range(start, start + 7)) >= 1)
 
     def _days_off(self, s: int) -> None:
         """Expected days off per Mon–Sun week, consecutive if required; hard or soft."""

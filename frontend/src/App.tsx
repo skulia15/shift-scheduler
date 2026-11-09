@@ -28,6 +28,8 @@ export default function App() {
             areas: stored.areas ?? [],
             area_demand: stored.area_demand ?? [],
             competences: stored.competences ?? [],
+            history: stored.history ?? [],
+            ledger: stored.ledger ?? [],
             competence_demand: stored.competence_demand ?? [],
             staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [] })),
             tasks: stored.tasks.map((t) => ({ ...t, competence_id: t.competence_id ?? null })),
@@ -87,6 +89,13 @@ export default function App() {
       setSolveInfo(null)
     })
 
+  const startNextPeriod = async () => {
+    if (!confirm('Start the next period? The last week stays as history and this period is added to the fairness totals. Save this period first if you want to keep it.')) return
+    setProject(await api.nextPeriod(project, roster))
+    setRoster([])
+    setSolveInfo(null)
+  }
+
   const resetToSample = async () => {
     if (!confirm('Replace the current project with the demo unit? Unsaved work is lost.')) return
     setProject(await api.sample())
@@ -136,7 +145,16 @@ export default function App() {
       <main>
         {error && <pre className="error-banner">{error}</pre>}
         {tab === 'Roster' && (
-          <RosterView project={project} roster={roster} setRoster={setRoster} evaluation={evaluation} solveInfo={solveInfo} busy={busy} />
+          <RosterView
+            project={project}
+            roster={roster}
+            setRoster={setRoster}
+            evaluation={evaluation}
+            solveInfo={solveInfo}
+            busy={busy}
+            onNextPeriod={startNextPeriod}
+            onLedgerChange={(ledger) => setProject({ ...project, ledger })}
+          />
         )}
         {tab === 'Setup' && <SetupView project={project} setProject={setProject} />}
         {tab === 'Demand' && <DemandView project={project} setProject={setProject} />}

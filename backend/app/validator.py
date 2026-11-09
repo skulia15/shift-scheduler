@@ -181,9 +181,15 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         mine = sorted((d, t, tasks) for (ss, d), (t, tasks) in work.items() if ss == s)
         days = [d for d, _, _ in mine]
         name = member.name
+        # The previous roster's last days take part in rest and run checks; only this period is reported.
+        past = sorted((d, t, []) for (ss, d), t in ctx.history.items() if ss == s)
+        seq = past + mine
+        seq_days = [d for d, _, _ in seq]
 
         short_days: list[int] = []
-        for (d1, t1, _), (d2, t2, _) in zip(mine, mine[1:]):
+        for (d1, t1, _), (d2, t2, _) in zip(seq, seq[1:]):
+            if d2 < 0:
+                continue
             rest = ctx.rest_minutes(d1, t1, d2, t2)
             if rest < rules.min_rest_hours_absolute * 60:
                 v("rest", "error", f"{name}: only {rest / 60:.1f}h rest (minimum {rules.min_rest_hours_absolute}h)", s, d2, t2)
@@ -197,32 +203,29 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                     v("short_rest_week", "warning", f"{name}: {n} short rests in one week (max {rules.max_short_rests_per_week})", s, week[0])
 
         if rules.max_consecutive_days is not None:
-            for run in _runs(days):
-                if len(run) > rules.max_consecutive_days:
-                    v("consecutive_days", "error", f"{name}: {len(run)} days in a row (max {rules.max_consecutive_days})", s, run[0])
+            for run in _runs(seq_days):
+                if len(run) > rules.max_consecutive_days and run[-1] >= 0:
+                    v("consecutive_days", "error", f"{name}: {len(run)} days in a row (max {rules.max_consecutive_days})", s, max(run[0], 0))
 
         if rules.max_consecutive_nights is not None:
-            nights = [d for d, t, _ in mine if ctx.shifts[t].is_night]
+            nights = [d for d, t, _ in seq if ctx.shifts[t].is_night]
             for run in _runs(nights):
-                if len(run) > rules.max_consecutive_nights:
-                    v("consecutive_nights", "error", f"{name}: {len(run)} nights in a row (max {rules.max_consecutive_nights})", s, run[0])
+                if len(run) > rules.max_consecutive_nights and run[-1] >= 0:
+                    v("consecutive_nights", "error", f"{name}: {len(run)} nights in a row (max {rules.max_consecutive_nights})", s, max(run[0], 0))
 
-        shift_on = {d: t for d, t, _ in mine}
+        shift_on = {d: t for d, t, _ in seq}
         if rules.weekly_rest_hours is not None:
             limit = rules.weekly_rest_hours * 60
-            rested = []
-            for x in range(ctx.n_days):
-                before = (x - 1, shift_on[x - 1]) if x > 0 and x - 1 in shift_on else None
-                after = (x + 1, shift_on[x + 1]) if x + 1 < ctx.n_days and x + 1 in shift_on else None
-                # An off neighbour means the rest runs on past it: long enough.
-                if x - 1 >= 0 and x - 1 not in shift_on:
-                    before = None
-                if x + 1 < ctx.n_days and x + 1 not in shift_on:
-                    after = None
-                rested.append(x not in shift_on and ctx.rest_around(x, before, after) >= limit)
-            for start in range(ctx.n_days - 6):
-                if not any(rested[start : start + 7]):
-                    v("weekly_rest", "error", f"{name}: no {rules.weekly_rest_hours:g}h continuous rest in 7 days", s, start)
+            H = ctx.history_days
+            rested: dict[int, bool] = {}
+            for x in range(-H, ctx.n_days):
+                # A missing or off neighbour means the rest runs on past it: long enough.
+                before = (x - 1, shift_on[x - 1]) if x - 1 in shift_on else None
+                after = (x + 1, shift_on[x + 1]) if x + 1 in shift_on else None
+                rested[x] = x not in shift_on and ctx.rest_around(x, before, after) >= limit
+            for start in range(-H, ctx.n_days - 6):
+                if start + 6 >= 0 and not any(rested[x] for x in range(start, start + 7)):
+                    v("weekly_rest", "error", f"{name}: no {rules.weekly_rest_hours:g}h continuous rest in 7 days", s, max(start, 0))
                     break
 
         if rules.days_off_per_week:
@@ -263,6 +266,8 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 under_hours=round(under / 60, 2),
                 night_shifts=sum(1 for _, t, _ in mine if ctx.shifts[t].is_night),
                 weekends_worked=worked_weekends,
+                holiday_shifts=sum(1 for d in days if d in ctx.holiday_days),
+                major_holiday_shifts=sum(1 for d in days if d in ctx.major_days),
                 requests_denied=sum(1 for d in days if (s, d) in ctx.request),
                 task_counts=dict(Counter(task for _, _, tasks in mine for task in tasks)),
             )

@@ -43,6 +43,8 @@ const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
   { key: 'overtime_spread', label: 'Largest individual overtime' },
   { key: 'under_hours', label: 'Each hour below contract' },
   { key: 'weekend_excess', label: 'Each weekend above the share' },
+  { key: 'weekend_fairness', label: 'Weekend load across periods' },
+  { key: 'holiday_fairness', label: 'Holiday load across periods' },
   { key: 'overstaff', label: 'Each person above minimum' },
 ]
 

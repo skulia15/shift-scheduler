@@ -25,5 +25,6 @@ export const api = {
   holidays: (start: string, days: number, agreement: Agreement) =>
     call<PublicHoliday[]>(`holidays?start=${start}&days=${days}&agreement=${agreement}`),
   solve: (project: Project) => call<SolveResult>('solve', project),
+  nextPeriod: (project: Project, roster: Assignment[]) => call<Project>('next-period', { project, roster }),
   validate: (project: Project, roster: Assignment[]) => call<Evaluation>('validate', { project, roster }),
 }

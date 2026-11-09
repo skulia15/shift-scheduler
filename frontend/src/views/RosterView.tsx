@@ -4,7 +4,7 @@ import { AlertIcon, CheckIcon, CloseIcon } from '../components/icons'
 import { longDate, periodDates, WEEKDAYS, weekday } from '../dates'
 import { shiftColor } from '../shiftColors'
 import { download } from '../store'
-import type { Assignment, Evaluation, ISODate, Project, SolveResult, Violation } from '../types'
+import type { Assignment, Evaluation, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
 
 interface Props {
   project: Project
@@ -13,10 +13,18 @@ interface Props {
   evaluation: Evaluation | null
   solveInfo: Pick<SolveResult, 'status' | 'message' | 'solve_seconds'> | null
   busy: boolean
+  onNextPeriod: () => void
+  onLedgerChange: (ledger: LedgerEntry[]) => void
 }
 
-export function RosterView({ project, roster, setRoster, evaluation, solveInfo, busy }: Props) {
+export function RosterView({ project, roster, setRoster, evaluation, solveInfo, busy, onNextPeriod, onLedgerChange }: Props) {
   const dates = useMemo(() => periodDates(project.period.start, project.period.days), [project.period])
+  // The previous roster's last week, shown greyed for context (the solver respects it too).
+  const pastDates = useMemo(
+    () => (project.history.length ? periodDates(new Date(Date.parse(project.period.start) - 7 * 86_400_000).toISOString().slice(0, 10), 7) : []),
+    [project.history.length, project.period.start],
+  )
+  const past = useMemo(() => new Map(project.history.map((a) => [`${a.staff_id}|${a.date}`, a])), [project.history])
   const [editing, setEditing] = useState<{ staffId: string; date: ISODate } | null>(null)
   const [filter, setFilter] = useState<'all' | 'error' | 'warning'>('all')
 
@@ -151,6 +159,9 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           <button className="btn ghost" onClick={() => confirm('Clear the whole roster?') && setRoster([])}>
             Clear
           </button>
+          <button className="btn plum" disabled={!roster.length} onClick={onNextPeriod}>
+            Start next period →
+          </button>
         </div>
 
         <div className="grid-box">
@@ -158,6 +169,12 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
             <thead>
               <tr>
                 <th className="name">Staff</th>
+                {pastDates.map((d, i) => (
+                  <th key={d} className={`past ${i === pastDates.length - 1 ? 'past-edge' : ''}`} title="Previous roster">
+                    {WEEKDAYS[weekday(d)].slice(0, 2)}
+                    <span className="num">{Number(d.slice(8))}</span>
+                  </th>
+                ))}
                 {dates.map((d) => (
                   <th key={d} className={dayClass(d, holidays)} title={holidays.get(d)}>
                     {WEEKDAYS[weekday(d)].slice(0, 2)}
@@ -185,6 +202,20 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                           <th className="name">
                             {s.name} <span className="pct">{s.employment_percent}%</span>
                           </th>
+                          {pastDates.map((d, i) => {
+                            const a = past.get(`${s.id}|${d}`)
+                            const t = a ? shiftIndex.get(a.shift_id) : undefined
+                            const color = t !== undefined ? shiftColor(t) : null
+                            return (
+                              <td key={d} className={`slot past ${i === pastDates.length - 1 ? 'past-edge' : ''}`}>
+                                {a && (
+                                  <span className="shift-cell" style={color ? { background: color.bg, color: color.fg, cursor: 'default' } : undefined}>
+                                    {project.shift_types[t ?? 0]?.code ?? a.shift_id}
+                                  </span>
+                                )}
+                              </td>
+                            )
+                          })}
                           {dates.map((d) => {
                             const key = `${s.id}|${d}`
                             const a = cell.get(key)
@@ -244,6 +275,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                       key={`${shift.id}-${g.id}`}
                       label={`${shift.code} · ${g.name}`}
                       dates={dates}
+                      pad={pastDates.length}
                       holidays={holidays}
                       cells={(evaluation?.coverage ?? []).filter((c) => c.shift_id === shift.id && c.group_id === g.id && !c.area_id && !c.competence_id)}
                     />
@@ -256,6 +288,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                         key={`${area.id}-${shift.id}-${g.id}`}
                         label={`${area.name} · ${shift.code} · ${g.name}`}
                         dates={dates}
+                        pad={pastDates.length}
                         holidays={holidays}
                         cells={(evaluation?.coverage ?? []).filter((c) => c.area_id === area.id && c.shift_id === shift.id && c.group_id === g.id)}
                       />
@@ -269,6 +302,7 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
                         key={`${comp.id}-${area?.id ?? 'all'}-${shift.id}`}
                         label={`${comp.name}${area ? ` · ${area.name}` : ''} · ${shift.code}`}
                         dates={dates}
+                        pad={pastDates.length}
                         holidays={holidays}
                         cells={(evaluation?.coverage ?? []).filter(
                           (c) => c.competence_id === comp.id && c.shift_id === shift.id && (c.area_id ?? null) === (area?.id ?? null),
@@ -282,6 +316,8 @@ export function RosterView({ project, roster, setRoster, evaluation, solveInfo, 
           </table>
         </div>
       </section>
+
+      <FairnessCard project={project} evaluation={evaluation} onLedgerChange={onLedgerChange} />
 
       <section className="card no-print">
         <div className="card-head">
@@ -343,12 +379,25 @@ function GroupRows({ label, children }: { label: string; children: React.ReactNo
   )
 }
 
-function CoverageRow({ label, dates, holidays, cells }: { label: string; dates: ISODate[]; holidays: Map<string, string>; cells: Evaluation['coverage'] }) {
+function CoverageRow({
+  label,
+  dates,
+  holidays,
+  cells,
+  pad = 0,
+}: {
+  label: string
+  dates: ISODate[]
+  holidays: Map<string, string>
+  cells: Evaluation['coverage']
+  pad?: number
+}) {
   if (cells.length === 0) return null
   const byDate = new Map(cells.map((c) => [c.date, c]))
   return (
     <tr className="coverage">
       <th className="name">{label}</th>
+      {pad > 0 && <td colSpan={pad} className="past past-edge" />}
       {dates.map((d) => {
         const c = byDate.get(d)
         const short = c && c.assigned < c.required
@@ -500,4 +549,100 @@ function daysBetween(a: ISODate, b: ISODate): number {
 
 function abbreviate(name: string): string {
   return name.slice(0, 3)
+}
+
+const LEDGER_COLUMNS: { key: 'weekends' | 'nights' | 'holiday_shifts' | 'major_holiday_shifts' | 'overtime_hours'; label: string; now: (st: Evaluation['staff'][number]) => number }[] = [
+  { key: 'weekends', label: 'Weekends', now: (st) => st.weekends_worked },
+  { key: 'nights', label: 'Nights', now: (st) => st.night_shifts },
+  { key: 'holiday_shifts', label: 'Holiday shifts', now: (st) => st.holiday_shifts },
+  { key: 'major_holiday_shifts', label: 'Stórhátíð', now: (st) => st.major_holiday_shifts },
+  { key: 'overtime_hours', label: 'Overtime h', now: (st) => st.overtime_hours },
+]
+
+/** Running totals across periods: earlier periods (editable) + this roster. */
+function FairnessCard({
+  project,
+  evaluation,
+  onLedgerChange,
+}: {
+  project: Project
+  evaluation: Evaluation | null
+  onLedgerChange: (ledger: LedgerEntry[]) => void
+}) {
+  const stats = new Map((evaluation?.staff ?? []).map((s) => [s.staff_id, s]))
+  const prior = new Map(project.ledger.map((e) => [e.staff_id, e]))
+  const blank = (staff_id: string): LedgerEntry => ({
+    staff_id,
+    periods: 0,
+    weekends: 0,
+    nights: 0,
+    holiday_shifts: 0,
+    major_holiday_shifts: 0,
+    overtime_hours: 0,
+    requests_denied: 0,
+  })
+  const setPrior = (staffId: string, key: (typeof LEDGER_COLUMNS)[number]['key'], value: number) => {
+    const entry = { ...(prior.get(staffId) ?? blank(staffId)), [key]: value }
+    onLedgerChange([...project.ledger.filter((e) => e.staff_id !== staffId), entry])
+  }
+  const periods = Math.max(0, ...project.ledger.map((e) => e.periods))
+
+  return (
+    <section className="card no-print">
+      <div className="card-head">
+        <div>
+          <h2>Fairness over time</h2>
+          <p className="hint">
+            Earlier periods{periods ? ` (${periods})` : ''} + this roster. The generator gives weekends and holidays to whoever has carried fewer, per
+            100% employment. Edit the earlier totals for the first period (e.g. who worked last Christmas).
+          </p>
+        </div>
+      </div>
+      <div className="table-scroll">
+        <table className="form-table" style={{ minWidth: 760 }}>
+          <thead>
+            <tr>
+              <th>Name</th>
+              {LEDGER_COLUMNS.map((c) => (
+                <th key={c.key}>{c.label}: earlier + now</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {project.staff.map((s) => {
+              const st = stats.get(s.id)
+              const e = prior.get(s.id)
+              return (
+                <tr key={s.id}>
+                  <td>
+                    {s.name} <span className="muted">{s.employment_percent}%</span>
+                  </td>
+                  {LEDGER_COLUMNS.map((c) => {
+                    const before = e?.[c.key] ?? 0
+                    const now = st ? c.now(st) : 0
+                    return (
+                      <td key={c.key}>
+                        <span className="row" style={{ flexWrap: 'nowrap' }}>
+                          <input
+                            type="number"
+                            className="num"
+                            style={{ width: 64, height: 32 }}
+                            aria-label={`${s.name} earlier ${c.label}`}
+                            value={before}
+                            onChange={(ev) => setPrior(s.id, c.key, Number(ev.target.value) || 0)}
+                          />
+                          <span className="muted">+ {Number.isInteger(now) ? now : now.toFixed(1)} =</span>
+                          <b>{Number.isInteger(before + now) ? before + now : (before + now).toFixed(1)}</b>
+                        </span>
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
 }

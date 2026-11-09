@@ -140,6 +140,8 @@ export interface Weights {
   short_rest: number
   short_rest_excess: number
   days_off: number
+  weekend_fairness: number
+  holiday_fairness: number
   weekend_excess: number
   overstaff: number
   coverage_shortfall: number
@@ -161,6 +163,17 @@ export type CustomRule =
   | (RuleBase & { type: 'fixed_area'; staff_id: string; area_id: string })
   | (RuleBase & { type: 'diverse_shifts'; staff_id: string; shift_ids: string[] | null })
 
+export interface LedgerEntry {
+  staff_id: string
+  periods: number
+  weekends: number
+  nights: number
+  holiday_shifts: number
+  major_holiday_shifts: number
+  overtime_hours: number
+  requests_denied: number
+}
+
 export interface Project {
   name: string
   period: { start: ISODate; days: number }
@@ -176,6 +189,8 @@ export interface Project {
   competence_demand: CompetenceDemand[]
   leave: Leave[]
   public_holidays: PublicHoliday[]
+  history: Assignment[]
+  ledger: LedgerEntry[]
   rules: LaborRules
   weights: Weights
   custom_rules: CustomRule[]
@@ -209,6 +224,8 @@ export interface StaffStats {
   under_hours: number
   night_shifts: number
   weekends_worked: number
+  holiday_shifts: number
+  major_holiday_shifts: number
   requests_denied: number
   task_counts: Record<string, number>
 }

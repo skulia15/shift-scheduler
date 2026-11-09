@@ -9,7 +9,7 @@ import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from .models import MINUTES_PER_DAY, LaborRules, Project, PublicHoliday, ShiftType, Staff, parse_clock
+from .models import MINUTES_PER_DAY, LaborRules, LedgerEntry, Project, PublicHoliday, ShiftType, Staff, parse_clock
 
 
 def credited_minutes(shift: ShiftType, day: date, holidays: dict[date, PublicHoliday], rules: LaborRules) -> int:
@@ -64,6 +64,11 @@ class Context:
     task_group: dict[str, str] = field(default_factory=dict)
     area_need: dict[tuple[int, int, str, str], tuple[int, int | None]] = field(default_factory=dict)  # (d, t, area, group)
     fixed_area: dict[int, str] = field(default_factory=dict)  # staff -> area (enabled fixed_area rules)
+    history: dict[tuple[int, int], int] = field(default_factory=dict)  # (staff, day < 0) -> shift
+    history_days: int = 0
+    prior: dict[int, LedgerEntry] = field(default_factory=dict)
+    holiday_days: set[int] = field(default_factory=set)
+    major_days: set[int] = field(default_factory=set)
     competence_need: dict[tuple[int, int, str, str | None], int] = field(default_factory=dict)  # (d, t, competence, area)
     task_competence: dict[str, str | None] = field(default_factory=dict)
     area_groups: set[tuple[int, int, str]] = field(default_factory=set)  # (d, t, group) with any area demand
@@ -253,6 +258,17 @@ def build_context(project: Project) -> Context:
                 overridden_competences.add(key)
             ctx.competence_need[key] = cd.min
     ctx.task_competence = {t.id: t.competence_id for t in project.tasks}
+
+    # The previous roster's last week, as fixed facts at negative day indices.
+    HISTORY_DAYS = 7
+    for a in project.history:
+        d = (a.date - dates[0]).days
+        if -HISTORY_DAYS <= d < 0 and a.staff_id in ctx.staff_index and a.shift_id in ctx.shift_index:
+            ctx.history[ctx.staff_index[a.staff_id], d] = ctx.shift_index[a.shift_id]
+    ctx.history_days = HISTORY_DAYS if ctx.history else 0
+    ctx.prior = {ctx.staff_index[e.staff_id]: e for e in project.ledger if e.staff_id in ctx.staff_index}
+    ctx.holiday_days = {ctx.day_of[h.date] for h in project.public_holidays if h.date in ctx.day_of}
+    ctx.major_days = {ctx.day_of[h.date] for h in project.public_holidays if h.date in ctx.day_of and h.major}
 
     ctx.area_groups = {(d, t, g) for (d, t, _, g) in ctx.area_need}
     for rule in project.custom_rules:

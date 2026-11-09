@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
 from .holidays import holidays_between
+from .periods import next_period
 from .models import Agreement, Evaluation, Project, PublicHoliday, SolveResult, ValidateRequest
 from .sample import sample_project
 from .solver import solve
@@ -30,6 +31,11 @@ def get_holidays(start: date, days: int, agreement: Agreement = "sfv") -> list[P
 async def post_solve(project: Project) -> SolveResult:
     # CP-SAT blocks for up to `solve_seconds`; keep the event loop free.
     return await run_in_threadpool(solve, project)
+
+
+@app.post("/api/next-period")
+def post_next_period(body: ValidateRequest) -> Project:
+    return next_period(body.project, body.roster)
 
 
 @app.post("/api/validate")

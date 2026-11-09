@@ -154,6 +154,8 @@ table.roster { border-collapse: collapse; font-size: 12px; width: max-content; m
 .roster thead .holiday { background: var(--lime-soft); color: var(--lime-soft-ink); }
 .roster td.holiday { background: var(--lime-tint); }
 .roster td.slot { padding: 3px 2px; text-align: center; }
+.roster .past { opacity: 0.45; background: var(--cream-2); }
+.roster .past-edge { border-right: 2px solid var(--plum-mid); }
 .roster tr.group-row { border-top: 0; }
 .roster tr.group-row th { position: sticky; left: 0; background: transparent; padding: 14px 14px 6px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--plum-mid); font-weight: 700; text-align: left; white-space: nowrap; }
 .shift-cell {

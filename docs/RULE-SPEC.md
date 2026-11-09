@@ -67,14 +67,14 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 |---|---|---|---|
 | F1 | Competence tags across groups (nurse, medication-competent, Icelandic speaker, can lead a shift) with per-shift/area minimums | Skill mix is Iceland's main gap: audits found 12–15% nurses vs. 20% floor / 27% target (Landlæknir 2015) | ✅ competences per person, per-shift/area minimums, tasks that require a competence |
 | F2 | Sick-call re-plan: minimal-change re-solve + ranked replacement list with change fee | ~1 in 3 shifts differs from the posted roster; filling holes is improvised | ❌ |
-| F3 | Fairness ledger across periods (weekends, nights, Christmas/New Year, short-notice changes, denied wishes) | Holiday work must be spread evenly; fairness is judged over the year, not 4 weeks | ❌ per period only |
+| F3 | Fairness ledger across periods (weekends, nights, Christmas/New Year, short-notice changes, denied wishes) | Holiday work must be spread evenly; fairness is judged over the year, not 4 weeks | ✅ ledger of weekends, nights, holiday/stórhátíð shifts, overtime; solver evens weekend and holiday load per FTE |
 | F4 | Stable coworkers / continuity: home area weighted toward part-timers, penalty for changing teams, continuity KPI | Coworker churn raises turnover; part-timer home-unit priority cut aides per resident 20–30% | ⚠️ fixed-area rule |
 | F5 | Demand from care weight (care hours per resident) + benchmark panel (nurse %, skilled %, care hours) | interRAI care weights drive funding; ministry plans new care-weight benchmarks by 2027 | ❌ |
 | F6 | Publishing lifecycle: draft (6 weeks) → final (1 month) → change log | Agreement requirement (W18–W20) | ❌ |
 | F7 | Bank/on-call staff type and reserve shifts sized to the absence rate; agency as costed last resort | Absence is predictable in aggregate | ❌ |
 | F8 | Wish window with points; swaps checked against rules before approval | Pure self-rostering is less fair and drives overtime; wishes then optimiser works | ⚠️ day-off requests (MTP owns wishes/swaps) |
 | F9 | Buddy rule: new staff/students paired with experienced; students don't count toward minimums | Safety and onboarding | ❌ |
-| F10 | Prior-period carry-over: last days of the previous roster for rest, consecutive days and nights | Boundary violations are invisible today | ❌ |
+| F10 | Prior-period carry-over: last days of the previous roster for rest, consecutive days and nights | Boundary violations are invisible today | ✅ last 7 days of the previous roster feed rest, weekly rest and run limits |
 
 ## 3. Suggested build order
 
@@ -82,7 +82,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
    8 h rests, W9 normal shift length, W2 165% band, agreement profiles.
 2. ~~**Holiday calendar** (W5/W17)~~ (done): generate Icelandic holidays for any period; duty reduction applied automatically.
 3. ~~**Competence tags** (F1)~~ (done) — highest care-quality impact.
-4. **Prior-period carry-over** (F10) and **fairness ledger** (F3) — both need history, so build them together.
+4. ~~**Prior-period carry-over** (F10) and **fairness ledger** (F3)~~ (done; "Start next period" rolls both forward) — both need history, so build them together.
 5. **Publishing + change log + sick-call re-plan** (F6, W19, F2).
 6. **Vaktahvati and shift-worker indicators** (W21, W22) — pay-relevant, visible to staff.
 7. Care-weight demand and benchmark panel (F5).

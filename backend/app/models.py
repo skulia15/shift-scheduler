@@ -217,6 +217,8 @@ class Weights(BaseModel):
     short_rest: int = 15
     short_rest_excess: int = 60  # each short rest beyond the weekly allowance
     days_off: int = 20  # a week without the expected (consecutive) days off
+    weekend_fairness: int = 5  # per weekend on the most-loaded person's running total (per 100% FTE)
+    holiday_fairness: int = 20  # same for holiday shifts; stórhátíð shifts count double
     weekend_excess: int = 10
     overstaff: int = 1
     coverage_shortfall: int = 500
@@ -295,6 +297,19 @@ CustomRule = Annotated[
 ]
 
 
+class LedgerEntry(BaseModel):
+    """Totals carried from earlier periods, so fairness is judged over time, not one roster."""
+
+    staff_id: str
+    periods: int = 0
+    weekends: int = 0
+    nights: int = 0
+    holiday_shifts: int = 0
+    major_holiday_shifts: int = 0
+    overtime_hours: float = 0
+    requests_denied: int = 0
+
+
 class Period(BaseModel):
     start: date
     days: int = Field(28, ge=1, le=84)
@@ -318,6 +333,8 @@ class Project(BaseModel):
     competence_demand: list[CompetenceDemand] = []
     leave: list[Leave] = []
     public_holidays: list[PublicHoliday] = []
+    history: list["Assignment"] = Field(default_factory=list, description="Previous roster's last days, for rest rules")
+    ledger: list[LedgerEntry] = []
     rules: LaborRules = LaborRules()
     weights: Weights = Weights()
     custom_rules: list[CustomRule] = []
@@ -395,6 +412,8 @@ class StaffStats(BaseModel):
     under_hours: float
     night_shifts: int
     weekends_worked: int
+    holiday_shifts: int = 0
+    major_holiday_shifts: int = 0
     requests_denied: int
     task_counts: dict[str, int]
 
@@ -426,3 +445,6 @@ class SolveResult(Evaluation):
     roster: list[Assignment]
     objective: float | None = None
     solve_seconds: float
+
+
+Project.model_rebuild()

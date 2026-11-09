@@ -4,8 +4,10 @@ from datetime import date, timedelta
 import pytest
 
 from app.context import credited_minutes
+from app.periods import next_period
 from app.holidays import easter_sunday, holidays_between, icelandic_holidays
 from app.models import (
+    LedgerEntry,
     Competence,
     CompetenceDemand,
     Task,
@@ -271,3 +273,39 @@ def test_validator_flags_missing_competence():
     project = competence_project(competence_demand=[CompetenceDemand(competence_id="med", shift_id="D", min=1)])
     roster = [Assignment(staff_id="s4", date=START, shift_id="D")]
     assert "competence" in {v.rule for v in evaluate(project, roster).violations if v.severity == "error"}
+
+
+def test_night_at_end_of_previous_roster_blocks_a_morning_on_day_one():
+    history = [Assignment(staff_id="s0", date=START - timedelta(days=1), shift_id="N")]
+    result = solve(small_project(history=history))
+    assert not any(a.staff_id == "s0" and a.date == START and a.shift_id == "D" for a in result.roster)
+    flagged = rule_hits(small_project(history=history), shifts_for("s0", {0: "D"}), "rest")
+    assert flagged == ["error"]
+
+
+def test_six_days_worked_before_the_period_force_rest_at_its_start():
+    history = [Assignment(staff_id="s0", date=START - timedelta(days=i), shift_id="D") for i in range(1, 7)]
+    result = solve(small_project(history=history))
+    assert errors(result) == []
+    assert not any(a.staff_id == "s0" and a.date == START for a in result.roster)
+
+
+def test_next_period_moves_dates_keeps_last_week_and_adds_to_ledger():
+    project = small_project(ledger=[LedgerEntry(staff_id="s0", periods=2, weekends=5)])
+    roster = solve(project).roster
+    nxt = next_period(project, roster)
+    assert nxt.period.start == START + timedelta(days=14)
+    assert nxt.history and all(START + timedelta(days=7) <= a.date < nxt.period.start for a in nxt.history)
+    s0 = next(e for e in nxt.ledger if e.staff_id == "s0")
+    worked = evaluate(project, roster).staff[0].weekends_worked
+    assert (s0.periods, s0.weekends) == (3, 5 + worked)
+
+
+def test_holiday_shifts_go_to_whoever_has_carried_fewer_before():
+    holiday = START + timedelta(days=3)
+    project = small_project(
+        public_holidays=[PublicHoliday(date=holiday, name="H", major=True)],
+        ledger=[LedgerEntry(staff_id="s0", holiday_shifts=4, major_holiday_shifts=4)],
+    )
+    result = solve(project)
+    assert not any(a.staff_id == "s0" and a.date == holiday for a in result.roster)
