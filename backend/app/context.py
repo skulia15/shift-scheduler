@@ -9,22 +9,35 @@ import math
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from .models import MINUTES_PER_DAY, LaborRules, Project, ShiftType, Staff, parse_clock
+from .models import MINUTES_PER_DAY, LaborRules, Project, PublicHoliday, ShiftType, Staff, parse_clock
 
 
-def credited_minutes(shift: ShiftType, day: date, holidays: set[date], rules: LaborRules) -> int:
-    """Paid minutes of `shift` starting on `day`, each weighted by the highest band it falls in."""
+def credited_minutes(shift: ShiftType, day: date, holidays: dict[date, PublicHoliday], rules: LaborRules) -> int:
+    """Paid minutes of `shift` starting on `day`, each weighted by the highest band it falls in.
+
+    A public holiday counts as a weekend day from its `starts` time. Its `high_from` time starts the
+    165% hours, which run until 08:00 the next morning.
+    """
     weighted = 0.0
     start = shift.start_minute
     for minute in range(start, start + shift.length_minutes):
         calendar_day = day + timedelta(days=minute // MINUTES_PER_DAY)
         clock = minute % MINUTES_PER_DAY
-        weekend = calendar_day.weekday() >= 5 or calendar_day in holidays
+        holiday = holidays.get(calendar_day)
+        eve_before = holidays.get(calendar_day - timedelta(days=1))
+        weekend = calendar_day.weekday() >= 5 or (holiday is not None and clock >= parse_clock(holiday.starts))
+        high = (holiday is not None and holiday.high_from is not None and clock >= parse_clock(holiday.high_from)) or (
+            eve_before is not None and eve_before.high_from is not None and clock < 8 * 60
+        )
         weight = 1.0
         for band in rules.weight_bands:
-            if band.days == "weekday" and weekend or band.days == "weekend_or_holiday" and not weekend:
-                continue
-            if parse_clock(band.start) <= clock < parse_clock(band.end):
+            applies = {
+                "weekday": not weekend,
+                "weekend_or_holiday": weekend,
+                "high_holiday": high,
+                "all": True,
+            }[band.days]
+            if applies and parse_clock(band.start) <= clock < parse_clock(band.end):
                 weight = max(weight, band.weight)
         weighted += weight
     # Breaks are unpaid; scale so weighting applies only to paid time.
@@ -99,6 +112,13 @@ class Context:
                 result.setdefault(saturday, []).append(d)
         return list(result.values())
 
+    def rest_around(self, day: int, before: tuple[int, int] | None, after: tuple[int, int] | None) -> float:
+        """Continuous rest (minutes) spanning `day` off, between the shift (day, type) `before` and `after`.
+        A missing side counts as unlimited (no history before the period)."""
+        if before is None or after is None:
+            return math.inf
+        return self.start_abs(*after) - self.end_abs(*before)
+
     def full_weeks(self) -> list[list[int]]:
         """Day indices of each Monday–Sunday week lying entirely inside the period."""
         weeks = []
@@ -136,7 +156,7 @@ def build_context(project: Project) -> Context:
         credited={},
     )
 
-    holidays = {h.date for h in project.public_holidays}
+    holidays = {h.date: h for h in project.public_holidays}
     for d, day in enumerate(dates):
         for t, shift in enumerate(project.shift_types):
             ctx.credited[d, t] = credited_minutes(shift, day, holidays, rules)

@@ -126,7 +126,7 @@ export function SetupView({ project: p, setProject }: Props) {
             action={
               <button
                 className="btn add"
-                onClick={() => set({ public_holidays: [...p.public_holidays, { date: p.period.start, name: 'Holiday', duty_reduction_hours: 7.2 }] })}
+                onClick={() => set({ public_holidays: [...p.public_holidays, { date: p.period.start, name: 'Holiday', duty_reduction_hours: 7.2, starts: '00:00', high_from: null }] })}
               >
                 + Holiday
               </button>
@@ -151,6 +151,22 @@ export function SetupView({ project: p, setProject }: Props) {
                     onChange={(v) => set({ public_holidays: patchAt(p.public_holidays, i, { duty_reduction_hours: v ?? 0 }) })}
                   />
                   <span className="muted">h duty</span>
+                </div>
+                <div className="row">
+                  <span className="muted">Holiday from</span>
+                  <input
+                    type="time"
+                    aria-label="Holiday starts"
+                    value={h.starts}
+                    onChange={(e) => set({ public_holidays: patchAt(p.public_holidays, i, { starts: e.target.value || '00:00' }) })}
+                  />
+                  <span className="muted">165% from</span>
+                  <input
+                    type="time"
+                    aria-label="165% from"
+                    value={h.high_from ?? ''}
+                    onChange={(e) => set({ public_holidays: patchAt(p.public_holidays, i, { high_from: e.target.value || null }) })}
+                  />
                 </div>
               </div>
             ))}

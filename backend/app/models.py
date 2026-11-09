@@ -124,7 +124,9 @@ class WeightBand(BaseModel):
     """Clock hours whose worked minutes count extra towards contract hours (vægi vinnustunda)."""
 
     name: str
-    days: Literal["weekday", "weekend_or_holiday", "all"]
+    days: Literal["weekday", "weekend_or_holiday", "high_holiday", "all"] = Field(
+        description="high_holiday = the 165% hours: holiday-eve evenings from `high_from` and the night after"
+    )
     start: str = Field(pattern=r"^\d{2}:\d{2}$")
     end: str = Field(pattern=r"^\d{2}:\d{2}$", description="24:00 allowed; must be after start")
     weight: float
@@ -135,6 +137,7 @@ def _icelandic_bands() -> list[WeightBand]:
         WeightBand(name="Weekday evening", days="weekday", start="17:00", end="24:00", weight=1.05),
         WeightBand(name="Weekend / holiday day", days="weekend_or_holiday", start="08:00", end="24:00", weight=1.05),
         WeightBand(name="Night", days="all", start="00:00", end="08:00", weight=1.2),
+        WeightBand(name="Christmas / New Year evening (165%)", days="high_holiday", start="00:00", end="24:00", weight=1.2),
     ]
 
 
@@ -145,11 +148,20 @@ class PublicHoliday(BaseModel):
     date: DateT
     name: str
     duty_reduction_hours: float = 7.2
+    starts: str = Field("00:00", pattern=r"^\d{2}:\d{2}$", description="Aðfangadagur / gamlársdagur: 12:00")
+    high_from: str | None = Field(
+        None, pattern=r"^\d{2}:\d{2}$", description="165% from this time until 08:00 next day (aðfangadagur / gamlársdagur: 16:00)"
+    )
+
+
+Agreement = Literal["sfv", "state", "municipal", "reykjavik", "custom"]
 
 
 class LaborRules(BaseModel):
-    """Working-time rules. Defaults follow Icelandic shift-work agreements (docs/research)."""
+    """Working-time rules. Defaults follow the SFV agreements (docs/RULE-SPEC.md); the UI's
+    agreement selector rewrites the settings that differ between agreements."""
 
+    agreement: Agreement = "sfv"
     full_time_weekly_hours: float = 36.0
     weight_bands: list[WeightBand] = Field(default_factory=_icelandic_bands)
     min_actual_weekly_hours: float | None = Field(
@@ -157,9 +169,16 @@ class LaborRules(BaseModel):
     )
     min_rest_hours: float = Field(11, description="Target daily rest; shorter rest is penalised")
     min_rest_hours_absolute: float = Field(8, description="Rest may never be shorter than this (shift-type change)")
-    max_shift_hours: float = 13
-    max_consecutive_days: int | None = Field(6, description="Statute: a day off in every 7")
-    min_days_off_per_week: int | None = Field(2, description="Per Mon–Sun week")
+    max_short_rests_per_week: int | None = Field(1, description="Rests below the target, per Mon–Sun week (soft)")
+    max_shift_hours: float = Field(13, description="Never scheduled longer (13 h per 24 h)")
+    min_shift_hours: float | None = Field(4, description="Shift types shorter than this are flagged")
+    normal_max_shift_hours: float | None = Field(10, description="Longer shift types need a local agreement (SGS–SNS: 12)")
+    weekly_rest_hours: float | None = Field(35, description="Continuous rest within every 7 days (statute)")
+    max_consecutive_days: int | None = Field(None, description="Optional local limit; weekly rest already caps it at 6")
+    days_off_per_week: int | None = Field(2, description="Days off per Mon–Sun week")
+    days_off_consecutive: bool = Field(True, description="The days off should be consecutive")
+    days_off_hard: bool = Field(False, description="SFV/state/SNS: 'að jafnaði' (soft); Reykjavík: hard")
+    lone_night_warning: bool = Field(False, description="SNS: lone night shifts need a safety assessment")
     max_avg_weekly_hours: float | None = 48
     max_overtime_hours: float | None = Field(None, description="Hard cap on hours above contract for the period")
     max_consecutive_nights: int | None = Field(None, description="No union limit; local practice")
@@ -174,6 +193,8 @@ class Weights(BaseModel):
     overtime_spread: int = 4  # per hour of the largest individual overtime, so it is shared fairly
     request_denied: int = 60
     short_rest: int = 15
+    short_rest_excess: int = 60  # each short rest beyond the weekly allowance
+    days_off: int = 20  # a week without the expected (consecutive) days off
     weekend_excess: int = 10
     overstaff: int = 1
     coverage_shortfall: int = 500

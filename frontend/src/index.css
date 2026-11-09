@@ -255,6 +255,7 @@ ul.violations .msg { flex: 1 1 280px; }
 .weight-row .top { display: flex; gap: 8px; align-items: center; }
 .weight-row .top span { flex: 1 1 0; }
 .weight-row input { width: 76px; height: 32px; }
+.weight-row .bar { flex: none; }
 .rule-card { border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 .rule-card.disabled { opacity: 0.55; }
 .rule-card .desc { font-size: 15px; font-weight: 500; border: 0 !important; padding: 0 !important; height: auto !important; background: transparent !important; width: 100%; }

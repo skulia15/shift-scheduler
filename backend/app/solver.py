@@ -112,6 +112,7 @@ class _Model:
                 m.add(n <= hi)
 
         # Rest between consecutive shifts.
+        shorts: dict[tuple[int, int], list[cp_model.IntVar]] = {}  # (staff, day of the later shift)
         for s in range(S):
             for d in range(D - 1):
                 for t1 in ctx.eligible[s]:
@@ -129,6 +130,15 @@ class _Model:
                             short = m.new_bool_var("")
                             m.add_bool_or([a.Not(), b.Not(), short])
                             self.penalise(short, w.short_rest * OCCURRENCE)
+                            shorts.setdefault((s, d + 1), []).append(short)
+
+        # Short rests are allowed only occasionally: a soft cap per Mon–Sun week.
+        if rules.max_short_rests_per_week is not None:
+            for s in range(S):
+                for week in ctx.full_weeks():
+                    used = [v for d in week for v in shorts.get((s, d), [])]
+                    if len(used) > rules.max_short_rests_per_week:
+                        self.soft_le(sum(used), rules.max_short_rests_per_week, False, w.short_rest_excess, len(used))
 
         overtimes: list[cp_model.IntVar] = []
         for s in range(S):
@@ -141,9 +151,10 @@ class _Model:
                 nights = [t for t in range(T) if ctx.shifts[t].is_night]
                 for d in range(D - k):
                     m.add(sum(self.work.get((s, d + i, t), 0) for i in range(k + 1) for t in nights) <= k)
-            if rules.min_days_off_per_week is not None:
-                for week in ctx.full_weeks():
-                    m.add(sum(self.day_work[s, d] for d in week) <= 7 - rules.min_days_off_per_week)
+            if rules.weekly_rest_hours is not None:
+                self._weekly_rest(s, rules.weekly_rest_hours * 60)
+            if rules.days_off_per_week:
+                self._days_off(s)
 
             worked = sum(var * ctx.paid[t] for (ss, _, t), var in self.work.items() if ss == s)
             weighted = sum(var * ctx.credited[d, t] for (ss, d, t), var in self.work.items() if ss == s)
@@ -191,6 +202,53 @@ class _Model:
 
         self._custom_rules()
         m.minimize(sum(self.objective))
+
+    def _off_if(self, s: int, d: int, literal: cp_model.IntVar) -> None:
+        """literal ⇒ person s is off on day d (a no-op when they can't work that day anyway)."""
+        expr = self.day_work[s, d]
+        if not isinstance(expr, int):
+            self.m.add(expr == 0).only_enforce_if(literal)
+
+    def _weekly_rest(self, s: int, minutes: float) -> None:
+        """Every 7-day window holds a day off whose surrounding rest is at least `minutes`."""
+        ctx, m = self.ctx, self.m
+        D = ctx.n_days
+        rested: list[cp_model.IntVar] = []
+        for x in range(D):
+            r = m.new_bool_var(f"rest{s}_{x}")
+            self._off_if(s, x, r)
+            if 0 < x < D - 1:
+                for t1 in ctx.eligible[s]:
+                    a = self.work.get((s, x - 1, t1))
+                    for t2 in ctx.eligible[s]:
+                        b = self.work.get((s, x + 1, t2))
+                        if a is not None and b is not None and ctx.rest_around(x, (x - 1, t1), (x + 1, t2)) < minutes:
+                            m.add_bool_or([r.Not(), a.Not(), b.Not()])
+            rested.append(r)
+        for start in range(D - 6):
+            m.add(sum(rested[start : start + 7]) >= 1)
+
+    def _days_off(self, s: int) -> None:
+        """Expected days off per Mon–Sun week, consecutive if required; hard or soft."""
+        ctx, m, rules = self.ctx, self.m, self.ctx.project.rules
+        need = rules.days_off_per_week or 0
+        for week in ctx.full_weeks():
+            ok = m.new_bool_var("")
+            worked = sum(self.day_work[s, d] for d in week)
+            if not isinstance(worked, int):
+                m.add(worked <= 7 - need).only_enforce_if(ok)
+            if rules.days_off_consecutive and need >= 2:
+                pairs = []
+                for d in week[:-1]:
+                    pair = m.new_bool_var("")
+                    self._off_if(s, d, pair)
+                    self._off_if(s, d + 1, pair)
+                    pairs.append(pair)
+                m.add_bool_or(pairs).only_enforce_if(ok)
+            if rules.days_off_hard:
+                m.add(ok == 1)
+            else:
+                self.penalise(1 - ok, ctx.project.weights.days_off * OCCURRENCE)
 
     def _at_least(self, expr: cp_model.LinearExprT, bound: int) -> None:
         if not bound:

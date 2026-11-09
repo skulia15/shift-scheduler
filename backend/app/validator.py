@@ -108,6 +108,15 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         if len(tasks) > 1:
             v("one_task_per_shift", "error", f"{name} has {len(tasks)} tasks on one shift", s, d, t)
 
+    # Shift types outside the normal length (a local agreement is needed).
+    used_types = {t for (t, _) in work.values()}
+    for t in sorted(used_types):
+        hours = ctx.shifts[t].paid_minutes / 60
+        if rules.min_shift_hours is not None and hours < rules.min_shift_hours:
+            v("shift_length", "warning", f"{ctx.shifts[t].name} is {hours:g}h, shorter than {rules.min_shift_hours:g}h", t=t)
+        if rules.normal_max_shift_hours is not None and hours > rules.normal_max_shift_hours:
+            v("shift_length", "warning", f"{ctx.shifts[t].name} is {hours:g}h, longer than the normal {rules.normal_max_shift_hours:g}h", t=t)
+
     # Coverage
     cells: list[CoverageCell] = []
     for (d, t, group_id), (lo, hi) in sorted(ctx.coverage.items()):
@@ -130,6 +139,12 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         if hi is not None and n > hi:
             v("area_coverage", "error", f"{area_id} {group_id}: {n} exceeds maximum {hi}", d=d, t=t)
 
+    if rules.lone_night_warning:
+        for d in range(ctx.n_days):
+            for t, shift in enumerate(ctx.shifts):
+                if shift.is_night and sum(1 for (_, dd), (tt, _) in work.items() if dd == d and tt == t) == 1:
+                    v("lone_night", "warning", f"Only one person on {shift.name}: safety assessment required", d=d, t=t)
+
     task_done: Counter[tuple[int, int, str]] = Counter()
     for (s, d), (t, tasks) in work.items():
         for task_id in tasks:
@@ -151,12 +166,19 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
         days = [d for d, _, _ in mine]
         name = member.name
 
+        short_days: list[int] = []
         for (d1, t1, _), (d2, t2, _) in zip(mine, mine[1:]):
             rest = ctx.rest_minutes(d1, t1, d2, t2)
             if rest < rules.min_rest_hours_absolute * 60:
                 v("rest", "error", f"{name}: only {rest / 60:.1f}h rest (minimum {rules.min_rest_hours_absolute}h)", s, d2, t2)
             elif rest < rules.min_rest_hours * 60:
                 v("short_rest", "warning", f"{name}: {rest / 60:.1f}h rest (target {rules.min_rest_hours}h)", s, d2, t2)
+                short_days.append(d2)
+        if rules.max_short_rests_per_week is not None:
+            for week in ctx.full_weeks():
+                n = sum(1 for d in short_days if d in week)
+                if n > rules.max_short_rests_per_week:
+                    v("short_rest_week", "warning", f"{name}: {n} short rests in one week (max {rules.max_short_rests_per_week})", s, week[0])
 
         if rules.max_consecutive_days is not None:
             for run in _runs(days):
@@ -169,11 +191,33 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 if len(run) > rules.max_consecutive_nights:
                     v("consecutive_nights", "error", f"{name}: {len(run)} nights in a row (max {rules.max_consecutive_nights})", s, run[0])
 
-        if rules.min_days_off_per_week is not None:
+        shift_on = {d: t for d, t, _ in mine}
+        if rules.weekly_rest_hours is not None:
+            limit = rules.weekly_rest_hours * 60
+            rested = []
+            for x in range(ctx.n_days):
+                before = (x - 1, shift_on[x - 1]) if x > 0 and x - 1 in shift_on else None
+                after = (x + 1, shift_on[x + 1]) if x + 1 < ctx.n_days and x + 1 in shift_on else None
+                # An off neighbour means the rest runs on past it: long enough.
+                if x - 1 >= 0 and x - 1 not in shift_on:
+                    before = None
+                if x + 1 < ctx.n_days and x + 1 not in shift_on:
+                    after = None
+                rested.append(x not in shift_on and ctx.rest_around(x, before, after) >= limit)
+            for start in range(ctx.n_days - 6):
+                if not any(rested[start : start + 7]):
+                    v("weekly_rest", "error", f"{name}: no {rules.weekly_rest_hours:g}h continuous rest in 7 days", s, start)
+                    break
+
+        if rules.days_off_per_week:
+            need = rules.days_off_per_week
             for week in ctx.full_weeks():
-                off = sum(1 for d in week if d not in days)
-                if off < rules.min_days_off_per_week:
-                    v("days_off_per_week", "error", f"{name}: {off} days off in week (min {rules.min_days_off_per_week})", s, week[0])
+                off = [d for d in week if d not in shift_on]
+                consecutive = any(d + 1 in off for d in off if d + 1 in week)
+                if len(off) < need or (rules.days_off_consecutive and need >= 2 and not consecutive):
+                    what = f"{len(off)} days off" if len(off) < need else "days off not consecutive"
+                    severity = "error" if rules.days_off_hard else "warning"
+                    v("days_off", severity, f"{name}: {what} in week of {ctx.dates[week[0]]:%d.%m}", s, week[0])
 
         worked = sum(ctx.paid[t] for _, t, _ in mine)
         credited = min(sum(ctx.credited[d, t] for d, t, _ in mine), ctx.credit_cap(worked))

@@ -14,6 +14,7 @@ from app.models import (
     ForbidSequenceRule,
     LaborRules,
     Leave,
+    PublicHoliday,
     Period,
     Project,
     ShiftType,
@@ -51,13 +52,23 @@ def errors(result):
 def test_credited_minutes_apply_icelandic_weighting_bands():
     rules = LaborRules()
     monday, saturday = date(2026, 11, 30), date(2026, 12, 5)
-    assert credited_minutes(DAY, monday, set(), rules) == 480
+    assert credited_minutes(DAY, monday, {}, rules) == 480
     # 16–17 at 1.0, 17–24 at 1.05
-    assert credited_minutes(EVE, monday, set(), rules) == 60 + 441
+    assert credited_minutes(EVE, monday, {}, rules) == 60 + 441
     # 23:30–24 at 1.05, 00–08 at 1.2
-    assert credited_minutes(NIGHT, monday, set(), rules) == round(30 * 1.05 + 480 * 1.2)
-    assert credited_minutes(DAY, saturday, set(), rules) == 504
-    assert credited_minutes(DAY, monday, {monday}, rules) == 504
+    assert credited_minutes(NIGHT, monday, {}, rules) == round(30 * 1.05 + 480 * 1.2)
+    assert credited_minutes(DAY, saturday, {}, rules) == 504
+    assert credited_minutes(DAY, monday, {monday: PublicHoliday(date=monday, name="h")}, rules) == 504
+
+
+def test_holiday_eve_counts_from_noon_and_165_percent_hours_weigh_1_2():
+    rules = LaborRules()
+    eve = date(2026, 12, 24)  # Thursday
+    holidays = {eve: PublicHoliday(date=eve, name="Aðfangadagur", starts="12:00", high_from="16:00")}
+    # 08–12 weekday 1.0, 12–16 holiday day 1.05
+    assert credited_minutes(DAY, eve, holidays, rules) == round(240 + 240 * 1.05)
+    # 16–24 is 165% → 1.2
+    assert credited_minutes(EVE, eve, holidays, rules) == round(480 * 1.2)
 
 
 def test_weighting_cannot_take_actual_hours_below_floor():
@@ -105,13 +116,13 @@ def test_hard_custom_sequence_rule_is_respected():
     assert not any(t == "E" and shifts.get((s, d + timedelta(days=1))) == "D" for (s, d), t in shifts.items())
 
 
-def test_validator_flags_leave_rest_and_consecutive_days():
+def test_validator_flags_leave_rest_and_missing_weekly_rest():
     project = small_project(leave=[Leave(staff_id="s0", start=START, end=START, kind="holiday")])
     roster = [Assignment(staff_id="s0", date=START + timedelta(days=i), shift_id="D") for i in range(7)]
     roster.append(Assignment(staff_id="s1", date=START, shift_id="N"))
     roster.append(Assignment(staff_id="s1", date=START + timedelta(days=1), shift_id="D"))
     rules = {v.rule for v in evaluate(project, roster).violations if v.severity == "error"}
-    assert {"leave", "rest", "consecutive_days", "days_off_per_week"} <= rules
+    assert {"leave", "rest", "weekly_rest"} <= rules
 
 
 @pytest.mark.parametrize("percent,expected_hours", [(100, 72.0), (50, 36.0)])
@@ -158,3 +169,41 @@ def test_diverse_shifts_rule_balances_a_persons_shift_mix():
     counts = Counter(a.shift_id for a in result.roster if a.staff_id == "s0")
     assert max(counts[t] for t in "DEN") - min(counts[t] for t in "DEN") <= 1
     assert not [v for v in result.violations if v.rule == "mix"]
+
+
+def shifts_for(staff_id: str, plan: dict[int, str]) -> list[Assignment]:
+    return [Assignment(staff_id=staff_id, date=START + timedelta(days=d), shift_id=t) for d, t in plan.items()]
+
+
+def rule_hits(project: Project, roster: list[Assignment], rule: str) -> list[str]:
+    return [v.severity for v in evaluate(project, roster).violations if v.rule == rule]
+
+
+def test_one_day_off_after_a_night_is_not_35h_weekly_rest():
+    # Night ends Tue 08:00, Tue off, evening Wed 16:00 → 32 h; no other day off in the week.
+    after_night = shifts_for("s0", {0: "N", **{d: "E" for d in range(2, 8)}})
+    assert rule_hits(small_project(), after_night, "weekly_rest") == ["error"]
+    # A day shift ending Mon 16:00 leaves 48 h over the same day off.
+    after_day = shifts_for("s0", {0: "D", **{d: "E" for d in range(2, 8)}})
+    assert rule_hits(small_project(), after_day, "weekly_rest") == []
+
+
+@pytest.mark.parametrize("hard,severity", [(False, "warning"), (True, "error")])
+def test_two_days_off_that_are_not_consecutive_are_flagged(hard, severity):
+    project = small_project(rules=LaborRules(days_off_hard=hard))
+    # Week of 30 Nov: off Mon and Wed only.
+    roster = shifts_for("s0", {1: "D", 3: "D", 4: "D", 5: "D", 6: "D"})
+    assert rule_hits(project, roster, "days_off") == [severity]
+
+
+def test_more_than_one_short_rest_in_a_week_is_flagged():
+    # Evening → day twice in one week: two 8 h rests.
+    roster = shifts_for("s0", {0: "E", 1: "D", 2: "E", 3: "D"})
+    assert rule_hits(small_project(), roster, "short_rest_week") == ["warning"]
+
+
+def test_solver_gives_two_consecutive_days_off_when_hard():
+    project = small_project(rules=LaborRules(days_off_hard=True))
+    result = solve(project)
+    assert result.status in ("optimal", "feasible")
+    assert [v for v in result.violations if v.rule in ("days_off", "weekly_rest")] == []

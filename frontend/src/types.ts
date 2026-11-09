@@ -76,7 +76,7 @@ export interface Leave {
 
 export interface WeightBand {
   name: string
-  days: 'weekday' | 'weekend_or_holiday' | 'all'
+  days: 'weekday' | 'weekend_or_holiday' | 'high_holiday' | 'all'
   start: string
   end: string
   weight: number
@@ -86,17 +86,29 @@ export interface PublicHoliday {
   date: ISODate
   name: string
   duty_reduction_hours: number
+  starts: string
+  high_from: string | null
 }
 
+export type Agreement = 'sfv' | 'state' | 'municipal' | 'reykjavik' | 'custom'
+
 export interface LaborRules {
+  agreement: Agreement
   full_time_weekly_hours: number
   weight_bands: WeightBand[]
   min_actual_weekly_hours: number | null
   min_rest_hours: number
   min_rest_hours_absolute: number
+  max_short_rests_per_week: number | null
   max_shift_hours: number
+  min_shift_hours: number | null
+  normal_max_shift_hours: number | null
+  weekly_rest_hours: number | null
   max_consecutive_days: number | null
-  min_days_off_per_week: number | null
+  days_off_per_week: number | null
+  days_off_consecutive: boolean
+  days_off_hard: boolean
+  lone_night_warning: boolean
   max_avg_weekly_hours: number | null
   max_overtime_hours: number | null
   max_consecutive_nights: number | null
@@ -109,6 +121,8 @@ export interface Weights {
   overtime_spread: number
   request_denied: number
   short_rest: number
+  short_rest_excess: number
+  days_off: number
   weekend_excess: number
   overstaff: number
   coverage_shortfall: number

@@ -15,8 +15,24 @@ type Tab = (typeof TABS)[number]
 export default function App() {
   const [tab, setTab] = usePersisted<Tab>('tab', 'Roster')
   const [stored, setProject] = usePersisted<Project | null>('project', null)
-  // Projects saved before areas existed lack these fields.
-  const project = useMemo(() => (stored ? { ...stored, areas: stored.areas ?? [], area_demand: stored.area_demand ?? [] } : null), [stored])
+  // Defaults for fields added since a project was saved come from the server's demo project.
+  const [defaults, setDefaults] = useState<Project | null>(null)
+  useEffect(() => {
+    api.sample().then(setDefaults).catch((e) => setError(String(e)))
+  }, [])
+  const project = useMemo(
+    () =>
+      stored && defaults
+        ? {
+            ...stored,
+            areas: stored.areas ?? [],
+            area_demand: stored.area_demand ?? [],
+            rules: { ...defaults.rules, ...stored.rules },
+            weights: { ...defaults.weights, ...stored.weights },
+          }
+        : null,
+    [stored, defaults],
+  )
   const [roster, setRoster] = usePersisted<Assignment[]>('roster', [])
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [solveInfo, setSolveInfo] = useState<Pick<SolveResult, 'status' | 'message' | 'solve_seconds'> | null>(null)
@@ -24,8 +40,8 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!project) api.sample().then(setProject).catch((e) => setError(String(e)))
-  }, [project, setProject])
+    if (!stored && defaults) setProject(defaults)
+  }, [stored, defaults, setProject])
 
   // Re-check the roster whenever it or the rules change.
   useEffect(() => {

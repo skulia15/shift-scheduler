@@ -1,5 +1,6 @@
 import { Checks, NumberField, PageHead, RemoveButton, Section, Select, TextField } from '../components/fields'
 import { patchAt, removeAt } from '../lists'
+import { AGREEMENTS } from '../agreements'
 import { newId } from '../store'
 import type { CustomRule, LaborRules, Project, Weights } from '../types'
 
@@ -11,21 +12,33 @@ interface Props {
 const LABOR_FIELDS: { key: keyof LaborRules; label: string; unit: string; nullable?: boolean; step?: number }[] = [
   { key: 'full_time_weekly_hours', label: 'Full-time hours / week', unit: 'h', step: 0.5 },
   { key: 'min_actual_weekly_hours', label: 'Weighting may not bring actual hours below', unit: 'h / week', nullable: true, step: 0.5 },
-  { key: 'min_rest_hours', label: 'Daily rest target', unit: 'h', step: 0.5 },
-  { key: 'min_rest_hours_absolute', label: 'Daily rest absolute minimum', unit: 'h', step: 0.5 },
-  { key: 'max_shift_hours', label: 'Max shift length', unit: 'h', step: 0.5 },
-  { key: 'max_consecutive_days', label: 'Max consecutive work days', unit: 'days', nullable: true },
-  { key: 'min_days_off_per_week', label: 'Min days off per Mon–Sun week', unit: 'days', nullable: true },
+  { key: 'min_rest_hours', label: 'Daily rest', unit: 'h', step: 0.5 },
+  { key: 'min_rest_hours_absolute', label: 'Shortest rest at a shift change', unit: 'h', step: 0.5 },
+  { key: 'max_short_rests_per_week', label: 'Short rests per week', unit: 'per week', nullable: true },
+  { key: 'weekly_rest_hours', label: 'Continuous weekly rest', unit: 'h / 7 days', nullable: true },
+  { key: 'days_off_per_week', label: 'Days off per Mon–Sun week', unit: 'days', nullable: true },
+  { key: 'max_shift_hours', label: 'Max work per shift (24 h)', unit: 'h', step: 0.5 },
+  { key: 'normal_max_shift_hours', label: 'Normal max shift length', unit: 'h', nullable: true, step: 0.5 },
+  { key: 'min_shift_hours', label: 'Min shift length', unit: 'h', nullable: true, step: 0.5 },
   { key: 'max_avg_weekly_hours', label: 'Max average hours / week', unit: 'h', nullable: true },
   { key: 'max_overtime_hours', label: 'Overtime cap for the period', unit: 'h', nullable: true },
+  { key: 'max_consecutive_days', label: 'Max consecutive work days', unit: 'days', nullable: true },
   { key: 'max_consecutive_nights', label: 'Max consecutive night shifts', unit: 'nights', nullable: true },
   { key: 'max_weekend_ratio', label: 'Max share of weekends worked', unit: '0–1', nullable: true, step: 0.05 },
+]
+
+const LABOR_TOGGLES: { key: 'days_off_consecutive' | 'days_off_hard' | 'lone_night_warning'; label: string }[] = [
+  { key: 'days_off_consecutive', label: 'Days off should be consecutive' },
+  { key: 'days_off_hard', label: 'Days off are a hard rule (Reykjavík)' },
+  { key: 'lone_night_warning', label: 'Warn on lone night shifts (SNS safety assessment)' },
 ]
 
 const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
   { key: 'coverage_shortfall', label: 'Missing person on a shift' },
   { key: 'request_denied', label: 'Working a requested day off' },
   { key: 'short_rest', label: 'Rest below target' },
+  { key: 'short_rest_excess', label: 'Short rest beyond the weekly allowance' },
+  { key: 'days_off', label: 'Week without the expected days off' },
   { key: 'overtime_hours', label: 'Each hour above contract' },
   { key: 'overtime_spread', label: 'Largest individual overtime' },
   { key: 'under_hours', label: 'Each hour below contract' },
@@ -82,7 +95,20 @@ export function RulesView({ project: p, setProject }: Props) {
 
       <div className="cols">
         <div className="col-wide">
-          <Section title="Labour rules" hint="Icelandic collective-agreement defaults (docs/research). Leave a field empty to switch the limit off.">
+          <Section
+            title="Labour rules"
+            hint="Defaults from the Icelandic collective agreements (docs/RULE-SPEC.md). Leave a field empty to switch the limit off."
+            action={
+              <label className="field inline">
+                <span className="muted">Kjarasamningur</span>
+                <Select
+                  value={p.rules.agreement}
+                  options={AGREEMENTS.map((a) => ({ value: a.value, label: a.label }))}
+                  onChange={(agreement) => setRules({ agreement, ...AGREEMENTS.find((a) => a.value === agreement)?.rules })}
+                />
+              </label>
+            }
+          >
             <div className="labor-grid">
               {LABOR_FIELDS.map((f) => (
                 <label key={f.key} className="tile">
@@ -97,6 +123,14 @@ export function RulesView({ project: p, setProject }: Props) {
                     />
                     <span className="unit">{f.unit}</span>
                   </span>
+                </label>
+              ))}
+            </div>
+            <div className="row" style={{ gap: 20 }}>
+              {LABOR_TOGGLES.map((f) => (
+                <label key={f.key} className="row">
+                  <input type="checkbox" checked={p.rules[f.key]} onChange={(e) => setRules({ [f.key]: e.target.checked })} />
+                  {f.label}
                 </label>
               ))}
             </div>
@@ -140,6 +174,7 @@ export function RulesView({ project: p, setProject }: Props) {
                             options={[
                               { value: 'weekday', label: 'Weekdays' },
                               { value: 'weekend_or_holiday', label: 'Weekends & holidays' },
+                              { value: 'high_holiday', label: '165% hours (Christmas / New Year eves)' },
                               { value: 'all', label: 'Every day' },
                             ]}
                             onChange={(days) => patch({ days })}

@@ -19,16 +19,16 @@ Status: ✅ enforced correctly · ⚠️ enforced but default or strength is wro
 | # | Rule | Value (all agreements unless noted) | Hard? | App today | Action |
 |---|---|---|---|---|---|
 | W1 | Full-time hours, shift workers | 36 virkar vinnustundir / week | contract | ✅ `full_time_weekly_hours` 36 | — |
-| W2 | Weighting (vægi) | 1.05 on 33.33%/55% álag hours (weekday 17–24, weekend/holiday 08–24); 1.2 on 65%/75% (00–08 daily); 120% hours 1.05 day / 1.2 night; 165% hours 1.2 | contract | ✅ bands 1.05/1.2 | Add 165% band (aðfangadagur/gamlársdagur 16–24 and following nights → 1.2) |
+| W2 | Weighting (vægi) | 1.05 on 33.33%/55% álag hours (weekday 17–24, weekend/holiday 08–24); 1.2 on 65%/75% (00–08 daily); 120% hours 1.05 day / 1.2 night; 165% hours 1.2 | contract | ✅ bands 1.05/1.2 + 165% band; holidays start at a set time (eves 12:00) | — |
 | W3 | 32 h floor | Weighting can't take actual hours below 32 h/week × FTE (pay-period average) | hard | ✅ credit ≤ worked × 36/32 | Confirm reading with holiday reduction (see Q1) |
 | W4 | Weighting only on rostered shifts | Extra shifts (aukavaktir) get no vægi | contract | ℹ️ app only plans rostered shifts | — |
 | W5 | Holiday duty reduction | −7.2 h × FTE per sérstakur frídagur on Mon–Fri; −3.6 h for aðfangadagur and gamlársdagur; applies worked or not | contract | ⚠️ supported, but holidays entered by hand | **Generate the full Icelandic holiday calendar** (Easter-based dates included) |
 | W6 | Daily rest | 11 h | hard (statute) | ✅ soft target 11 h | — |
-| W7 | Reduced rest | ≥ 8 h, only at a planned change of shift type, normally at most once a week; never overtime→shift | hard floor 8 h | ⚠️ 8 h floor hard, 8–11 h penalised, no weekly cap | Add "at most 1 short rest per week" (soft, high weight); allow 8 h only when shift type changes |
+| W7 | Reduced rest | ≥ 8 h, only at a planned change of shift type, normally at most once a week; never overtime→shift | hard floor 8 h | ✅ 8 h floor hard, 8–11 h penalised, max 1 per week (soft, weight 60) | Same-type shifts can't produce < 11 h with shifts ≤ 13 h, so the shift-change condition holds by construction |
 | W8 | Max per 24 h | 13 h scheduled (16 h emergencies only) | hard | ✅ `max_shift_hours` 13 | Check per 24 h window, not per shift |
-| W9 | Shift length | Normally 4–10 h (SFV, state, RVK); 4–12 h (SGS↔SNS); other lengths need local agreement | deviable | ❌ no min, max 13 | Add `min_shift_hours` 4 and `normal_max_shift_hours` (10 / 12) as warnings |
-| W10 | Weekly rest | 35 h continuous per 7 days, or 2 days per 14 (statute) | hard | ⚠️ approximated by max 6 consecutive days | Replace with real 35 h rest-window check |
-| W11 | Two days off | "að jafnaði" 2 consecutive days off per week (SFV, state, SNS: soft). RVK: strict, split only as 2 × 36 h, moving needs union consent | soft (RVK: hard) | ⚠️ hard "2 days off per Mon–Sun week", not consecutive | Make soft + consecutive; hard only in the Reykjavík profile |
+| W9 | Shift length | Normally 4–10 h (SFV, state, RVK); 4–12 h (SGS↔SNS); other lengths need local agreement | deviable | ✅ warnings below 4 h / above normal max (10 h, SNS 12 h) | — |
+| W10 | Weekly rest | 35 h continuous per 7 days, or 2 days per 14 (statute) | hard | ✅ every 7-day window holds a day off with ≥ 35 h rest around it (hard) | 2-days-per-14 deferral not modelled |
+| W11 | Two days off | "að jafnaði" 2 consecutive days off per week (SFV, state, SNS: soft). RVK: strict, split only as 2 × 36 h, moving needs union consent | soft (RVK: hard) | ✅ 2 consecutive days per Mon–Sun week, soft (weight 20); hard in the Reykjavík profile | 2 × 36 h split not modelled |
 | W12 | 48 h average | Incl. overtime, 6-month reference period (Jan–Jun, Jul–Dec) | hard | ✅ over the plan period (stricter) | Optional: carry hours from earlier periods |
 | W13 | Night worker | ≥ 3 h of 23:00–06:00 or ≥ 40% of annual work at night; avg 8 h / 24 h | hard | ❌ | Flag night workers; check the 8 h average |
 | W14 | Night opt-out by age | 55+ (SFV, state, RVK), 50+ (SNS: SGS, SAL); FÍH-SFV 2024: nights only, not on-call | employee's choice | ⚠️ via "May work" shift ticks | Add birth year + "opted out of nights"; warn |
@@ -43,7 +43,7 @@ Status: ✅ enforced correctly · ⚠️ enforced but default or strength is wro
 | W23 | Meals | Eating on shift counts as working time since 1.11.2024; old 25-min payment gone | contract | ✅ breaks default 0 | — |
 | W24 | Part-time extra hours | Overtime unless regular for ≥ 1 month (then paid as salary share); Efling: shifts < 8 h must be in the contract; ≥ 80% staff get priority for 8 h shifts | contract | ❌ | Warn on short shifts for ≥ 80% Efling staff |
 | W25 | Overtime | Y2 above 38.92 h/week; nurses can take 1.62 h off per overtime hour | pay | ℹ️ overtime = credited hours above target | Show hours above 38.92 h/week |
-| W26 | Lone night shift | SNS: safety assessment required | info | ❌ | Warn when one person is alone on a night shift |
+| W26 | Lone night shift | SNS: safety assessment required | info | ✅ warning when enabled (SNS profile) | — |
 | W27 | Working-time record | Employer keeps rest, weekly day off and deviations (L. 58/2023, 57. gr. a) | legal | ❌ | Export of rest and deviation log per person |
 
 ### Agreement profiles
@@ -78,7 +78,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 
 ## 3. Suggested build order
 
-1. **Correct the defaults** (small): W11 soft + consecutive, W10 35 h weekly rest, W7 weekly cap on
+1. ~~**Correct the defaults**~~ (done): W11 soft + consecutive, W10 35 h weekly rest, W7 weekly cap on
    8 h rests, W9 normal shift length, W2 165% band, agreement profiles.
 2. **Holiday calendar** (W5/W17): generate Icelandic holidays for any period; duty reduction applied automatically.
 3. **Competence tags** (F1) — highest care-quality impact.
