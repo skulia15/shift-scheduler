@@ -1,5 +1,6 @@
 import { Checks, NumberField, PageHead, RemoveButton, Section, TextField } from '../components/fields'
 import { CloseIcon } from '../components/icons'
+import { api } from '../api'
 import { monthShort } from '../dates'
 import { patchAt, removeAt } from '../lists'
 import { shiftColor } from '../shiftColors'
@@ -15,6 +16,8 @@ export function SetupView({ project: p, setProject }: Props) {
   const set = (patch: Partial<Project>) => setProject({ ...p, ...patch })
   const groupOptions = p.groups.map((g) => ({ value: g.id, label: g.name }))
   const shiftOptions = p.shift_types.map((s) => ({ value: s.id, label: s.code }))
+  // Replace the list with the period's Icelandic holidays for the selected agreement.
+  const fillHolidays = async () => set({ public_holidays: await api.holidays(p.period.start, p.period.days, p.rules.agreement) })
 
   return (
     <>
@@ -124,12 +127,24 @@ export function SetupView({ project: p, setProject }: Props) {
             title="Public holidays"
             hint="Weighted like weekends. On weekdays they cut full-time duty (7.2 h, or 3.6 h for aðfangadagur / gamlársdagur)."
             action={
-              <button
-                className="btn add"
-                onClick={() => set({ public_holidays: [...p.public_holidays, { date: p.period.start, name: 'Holiday', duty_reduction_hours: 7.2, starts: '00:00', high_from: null }] })}
-              >
-                + Holiday
-              </button>
+              <span className="row">
+                <button className="btn plum" onClick={fillHolidays}>
+                  Fill Icelandic holidays
+                </button>
+                <button
+                  className="btn add"
+                  onClick={() =>
+                    set({
+                      public_holidays: [
+                        ...p.public_holidays,
+                        { date: p.period.start, name: 'Holiday', duty_reduction_hours: 7.2, major: false, starts: '00:00', high_from: null },
+                      ],
+                    })
+                  }
+                >
+                  + Holiday
+                </button>
+              </span>
             }
           >
             {p.public_holidays.map((h, i) => (
@@ -140,6 +155,7 @@ export function SetupView({ project: p, setProject }: Props) {
                     <b style={{ fontSize: 15 }}>{Number(h.date.slice(8))}</b>
                   </span>
                   <TextField value={h.name} onChange={(name) => set({ public_holidays: patchAt(p.public_holidays, i, { name }) })} />
+                  {h.major && <span className="chip hard">Stórhátíð</span>}
                   <RemoveButton label="Remove holiday" onClick={() => set({ public_holidays: removeAt(p.public_holidays, i) })} />
                 </div>
                 <div className="row">

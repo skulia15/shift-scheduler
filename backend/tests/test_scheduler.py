@@ -4,6 +4,7 @@ from datetime import date, timedelta
 import pytest
 
 from app.context import credited_minutes
+from app.holidays import easter_sunday, holidays_between, icelandic_holidays
 from app.models import (
     Area,
     AreaDemand,
@@ -207,3 +208,32 @@ def test_solver_gives_two_consecutive_days_off_when_hard():
     result = solve(project)
     assert result.status in ("optimal", "feasible")
     assert [v for v in result.violations if v.rule in ("days_off", "weekly_rest")] == []
+
+
+def test_easter_and_moving_holidays():
+    assert easter_sunday(2026) == date(2026, 4, 5)
+    assert easter_sunday(2027) == date(2027, 3, 28)
+    days = {h.name: h.date for h in icelandic_holidays(2026)}
+    assert days["Sumardagurinn fyrsti"] == date(2026, 4, 23)
+    assert days["Uppstigningardagur"] == date(2026, 5, 14)
+    assert days["Hvítasunnudagur"] == date(2026, 5, 24)
+    assert days["Frídagur verslunarmanna"] == date(2026, 8, 3)
+
+
+@pytest.mark.parametrize("agreement,majors", [("sfv", 8), ("state", 8), ("municipal", 9)])
+def test_seventeen_holidays_with_agreement_specific_major_days(agreement, majors):
+    holidays = icelandic_holidays(2026, agreement)
+    assert len(holidays) == 17
+    assert sum(h.major for h in holidays) == majors
+
+
+def test_christmas_roster_target_matches_worked_example():
+    # 4 weeks from Mon 14 Dec 2026: 144 h − (3.6 + 7.2 + 3.6 + 7.2) = 122.4 h (26 Dec is a Saturday).
+    start = date(2026, 12, 14)
+    project = small_project(
+        period=Period(start=start, days=28),
+        staff=[Staff(id="s0", name="A", group_ids=["g"])],
+        coverage=[],
+        public_holidays=holidays_between(start, 28),
+    )
+    assert evaluate(project, []).staff[0].target_hours == 122.4

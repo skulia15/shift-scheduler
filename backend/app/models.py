@@ -148,6 +148,7 @@ class PublicHoliday(BaseModel):
     date: DateT
     name: str
     duty_reduction_hours: float = 7.2
+    major: bool = Field(False, description="Stórhátíðardagur (120% pay); affects pay, not credited hours")
     starts: str = Field("00:00", pattern=r"^\d{2}:\d{2}$", description="Aðfangadagur / gamlársdagur: 12:00")
     high_from: str | None = Field(
         None, pattern=r"^\d{2}:\d{2}$", description="165% from this time until 08:00 next day (aðfangadagur / gamlársdagur: 16:00)"

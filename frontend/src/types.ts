@@ -86,6 +86,7 @@ export interface PublicHoliday {
   date: ISODate
   name: string
   duty_reduction_hours: number
+  major: boolean
   starts: string
   high_from: string | null
 }

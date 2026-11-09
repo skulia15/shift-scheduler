@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
+from .holidays import holidays_between
 from .models import (
     Area,
     AreaDemand,
@@ -14,7 +15,6 @@ from .models import (
     Leave,
     MaxShiftTypeRule,
     Period,
-    PublicHoliday,
     Project,
     RotateTaskEvenlyRule,
     ShiftType,
@@ -110,11 +110,7 @@ def sample_project() -> Project:
             Leave(staff_id="n3", start=date(2026, 12, 5), end=date(2026, 12, 6), kind="request", granted=True, note="Brúðkaup"),
             Leave(staff_id="f10", start=date(2026, 12, 18), end=date(2026, 12, 18), kind="request"),
         ],
-        public_holidays=[
-            PublicHoliday(date=date(2026, 12, 24), name="Aðfangadagur", duty_reduction_hours=3.6, starts="12:00", high_from="16:00"),
-            PublicHoliday(date=date(2026, 12, 25), name="Jóladagur"),
-            PublicHoliday(date=date(2026, 12, 26), name="Annar í jólum"),
-        ],
+        public_holidays=holidays_between(date(2026, 11, 30), 28),
         custom_rules=[
             AvoidTaskRepeatRule(
                 id="bath-repeat",

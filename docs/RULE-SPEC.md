@@ -22,7 +22,7 @@ Status: ✅ enforced correctly · ⚠️ enforced but default or strength is wro
 | W2 | Weighting (vægi) | 1.05 on 33.33%/55% álag hours (weekday 17–24, weekend/holiday 08–24); 1.2 on 65%/75% (00–08 daily); 120% hours 1.05 day / 1.2 night; 165% hours 1.2 | contract | ✅ bands 1.05/1.2 + 165% band; holidays start at a set time (eves 12:00) | — |
 | W3 | 32 h floor | Weighting can't take actual hours below 32 h/week × FTE (pay-period average) | hard | ✅ credit ≤ worked × 36/32 | Confirm reading with holiday reduction (see Q1) |
 | W4 | Weighting only on rostered shifts | Extra shifts (aukavaktir) get no vægi | contract | ℹ️ app only plans rostered shifts | — |
-| W5 | Holiday duty reduction | −7.2 h × FTE per sérstakur frídagur on Mon–Fri; −3.6 h for aðfangadagur and gamlársdagur; applies worked or not | contract | ⚠️ supported, but holidays entered by hand | **Generate the full Icelandic holiday calendar** (Easter-based dates included) |
+| W5 | Holiday duty reduction | −7.2 h × FTE per sérstakur frídagur on Mon–Fri; −3.6 h for aðfangadagur and gamlársdagur; applies worked or not | contract | ✅ "Fill Icelandic holidays" generates all 17 for any period (Easter-based dates, eves from 12:00) | — |
 | W6 | Daily rest | 11 h | hard (statute) | ✅ soft target 11 h | — |
 | W7 | Reduced rest | ≥ 8 h, only at a planned change of shift type, normally at most once a week; never overtime→shift | hard floor 8 h | ✅ 8 h floor hard, 8–11 h penalised, max 1 per week (soft, weight 60) | Same-type shifts can't produce < 11 h with shifts ≤ 13 h, so the shift-change condition holds by construction |
 | W8 | Max per 24 h | 13 h scheduled (16 h emergencies only) | hard | ✅ `max_shift_hours` 13 | Check per 24 h window, not per shift |
@@ -34,7 +34,7 @@ Status: ✅ enforced correctly · ⚠️ enforced but default or strength is wro
 | W14 | Night opt-out by age | 55+ (SFV, state, RVK), 50+ (SNS: SGS, SAL); FÍH-SFV 2024: nights only, not on-call | employee's choice | ⚠️ via "May work" shift ticks | Add birth year + "opted out of nights"; warn |
 | W15 | Consecutive nights | No limit in any text | — | ✅ default off | — |
 | W16 | Weekend frequency | No numeric rule; holiday work "spread as evenly as possible" | soft | ✅ 50% soft default | Add holiday-fairness across periods (F3) |
-| W17 | Stórhátíðardagar | 8 days (SFV, state, FÍH-RVK; 1. maí only for SFV staff hired before 2000); 9 incl. 1. maí (SNS) | pay | ❌ | Per-agreement holiday categories (affects pay export, not credited hours) |
+| W17 | Stórhátíðardagar | 8 days (SFV, state, FÍH-RVK; 1. maí only for SFV staff hired before 2000); 9 incl. 1. maí (SNS) | pay | ✅ marked per agreement (8, or 9 with 1. maí for SNS); 1. maí for pre-2000 SFV hires not modelled | Use in a pay export |
 | W18 | Roster notice | Draft 6 weeks ahead, final 1 month ahead | hard | ❌ | Publishing lifecycle (F6) |
 | W19 | Changes after publishing | Employee's consent; breytingargjald 2% of monthly salary (< 24 h notice), 1.3% (24–168 h) | hard (consent) | ❌ | Change log + fee estimate per change |
 | W20 | Short-notice extra shift | 1.3% fee per 8 h shift taken on < 24 h notice in evening/night/weekend bands | pay | ❌ | Same change log |
@@ -80,7 +80,7 @@ Proposal: a "Kjarasamningur" select on the Rules tab that sets these, with every
 
 1. ~~**Correct the defaults**~~ (done): W11 soft + consecutive, W10 35 h weekly rest, W7 weekly cap on
    8 h rests, W9 normal shift length, W2 165% band, agreement profiles.
-2. **Holiday calendar** (W5/W17): generate Icelandic holidays for any period; duty reduction applied automatically.
+2. ~~**Holiday calendar** (W5/W17)~~ (done): generate Icelandic holidays for any period; duty reduction applied automatically.
 3. **Competence tags** (F1) — highest care-quality impact.
 4. **Prior-period carry-over** (F10) and **fairness ledger** (F3) — both need history, so build them together.
 5. **Publishing + change log + sick-call re-plan** (F6, W19, F2).

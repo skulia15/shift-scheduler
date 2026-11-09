@@ -1,4 +1,4 @@
-import type { Assignment, Evaluation, Project, SolveResult } from './types'
+import type { Agreement, Assignment, Evaluation, Project, PublicHoliday, SolveResult } from './types'
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/${path}`, {
@@ -22,6 +22,8 @@ function formatError(detail: { detail?: unknown }): string {
 
 export const api = {
   sample: () => call<Project>('sample'),
+  holidays: (start: string, days: number, agreement: Agreement) =>
+    call<PublicHoliday[]>(`holidays?start=${start}&days=${days}&agreement=${agreement}`),
   solve: (project: Project) => call<SolveResult>('solve', project),
   validate: (project: Project, roster: Assignment[]) => call<Evaluation>('validate', { project, roster }),
 }

@@ -157,7 +157,9 @@ export function LeaveView({ project: p, setProject }: Props) {
                   {monthShort(h.date)}
                   <b style={{ fontSize: 16 }}>{Number(h.date.slice(8))}</b>
                 </span>
-                <span style={{ fontWeight: 600, flex: '1 1 0' }}>{h.name}</span>
+                <span style={{ fontWeight: 600, flex: '1 1 0' }}>
+                  {h.name} {h.major && <span className="chip hard">Stórhátíð</span>}
+                </span>
                 <span className="muted">−{h.duty_reduction_hours} h duty</span>
               </div>
             ))}
