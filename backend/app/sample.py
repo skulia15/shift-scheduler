@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import date
 
 from .models import (
+    Area,
+    AreaDemand,
+    DiverseShiftsRule,
+    FixedAreaRule,
     AvoidTaskRepeatRule,
     CoverageDemand,
     Leave,
@@ -89,6 +93,15 @@ def sample_project() -> Project:
             TaskDemand(task_id="meds", shift_id="M", count=1),
             TaskDemand(task_id="meds", shift_id="K", count=1),
         ],
+        areas=[Area(id="A", code="A", name="Gangur A"), Area(id="B", code="B", name="Gangur B")],
+        # Floor staff on day and evening shifts work in a hallway; the night floor person covers both.
+        area_demand=[
+            AreaDemand(area_id="A", shift_id="M", group_id="floor", min=2),
+            AreaDemand(area_id="B", shift_id="M", group_id="floor", min=1),
+            AreaDemand(area_id="A", shift_id="K", group_id="floor", min=1),
+            AreaDemand(area_id="B", shift_id="K", group_id="floor", min=1),
+            AreaDemand(area_id="A", shift_id="M", group_id="floor", dates=[date(2026, 12, 24), date(2026, 12, 25)], min=1),
+        ],
         leave=[
             Leave(staff_id="n1", start=date(2026, 12, 21), end=date(2026, 12, 27), kind="holiday", note="Jólafrí"),
             Leave(staff_id="f2", start=date(2026, 12, 7), end=date(2026, 12, 11), kind="holiday"),
@@ -127,6 +140,19 @@ def sample_project() -> Project:
                 task_id="bath",
                 proportional_to_employment=True,
                 weight=10,
+            ),
+            FixedAreaRule(
+                id="lilja-hallway",
+                description="Lilja always works in Gangur A",
+                staff_id="f1",
+                area_id="A",
+                hard=True,
+            ),
+            DiverseShiftsRule(
+                id="petra-variety",
+                description="Petra wants a varied mix of shifts",
+                staff_id="f5",
+                weight=15,
             ),
             MaxShiftTypeRule(
                 id="floor-nights",

@@ -1,4 +1,4 @@
-import { NumberField, Section, Select, TextField } from '../components/fields'
+import { Checks, NumberField, Section, Select, TextField } from '../components/fields'
 import { patchAt, removeAt } from '../lists'
 import { newId } from '../store'
 import type { CustomRule, LaborRules, Project, Weights } from '../types'
@@ -38,6 +38,8 @@ const RULE_TYPES: { value: CustomRule['type']; label: string }[] = [
   { value: 'rotate_task_evenly', label: 'Rotate a task evenly' },
   { value: 'max_shift_type', label: 'Limit a shift type per person' },
   { value: 'forbid_sequence', label: 'Forbid shift A followed by shift B' },
+  { value: 'fixed_area', label: 'Person always in one area' },
+  { value: 'diverse_shifts', label: 'Person wants a varied shift mix' },
 ]
 
 function blankRule(type: CustomRule['type'], p: Project, id: string): CustomRule {
@@ -54,6 +56,10 @@ function blankRule(type: CustomRule['type'], p: Project, id: string): CustomRule
       return { ...base, type, group_id, shift_id, max_count: 8 }
     case 'forbid_sequence':
       return { ...base, type, group_id: null, from_shift_id: shift_id, to_shift_id: shift_id }
+    case 'fixed_area':
+      return { ...base, type, hard: true, staff_id: p.staff[0]?.id ?? '', area_id: p.areas[0]?.id ?? '' }
+    case 'diverse_shifts':
+      return { ...base, type, staff_id: p.staff[0]?.id ?? '', shift_ids: null }
   }
 }
 
@@ -65,6 +71,8 @@ export function RulesView({ project: p, setProject }: Props) {
   const groups = p.groups.map((g) => ({ value: g.id, label: g.name }))
   const tasks = p.tasks.map((t) => ({ value: t.id, label: t.name }))
   const shifts = p.shift_types.map((s) => ({ value: s.id, label: `${s.code} ${s.name}` }))
+  const people = p.staff.map((s) => ({ value: s.id, label: s.name }))
+  const areas = p.areas.map((a) => ({ value: a.id, label: a.name }))
 
   return (
     <div className="stack">
@@ -170,6 +178,22 @@ export function RulesView({ project: p, setProject }: Props) {
                   <Select value={r.from_shift_id} options={shifts} onChange={(from_shift_id) => setRule(i, { from_shift_id })} />
                   must not be followed next day by
                   <Select value={r.to_shift_id} options={shifts} onChange={(to_shift_id) => setRule(i, { to_shift_id })} />
+                </>
+              ) : r.type === 'fixed_area' ? (
+                <>
+                  <Select value={r.staff_id} options={people} onChange={(staff_id) => setRule(i, { staff_id })} /> always works in
+                  <Select value={r.area_id} options={areas} onChange={(area_id) => setRule(i, { area_id })} />
+                  when on shift
+                </>
+              ) : r.type === 'diverse_shifts' ? (
+                <>
+                  <Select value={r.staff_id} options={people} onChange={(staff_id) => setRule(i, { staff_id })} /> gets a balanced mix of
+                  <Checks
+                    values={r.shift_ids ?? []}
+                    options={shifts}
+                    onChange={(ids) => setRule(i, { shift_ids: ids.length ? ids : null })}
+                  />
+                  <span className="muted">(none ticked = every shift they may work)</span>
                 </>
               ) : (
                 <>

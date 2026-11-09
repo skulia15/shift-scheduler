@@ -11,6 +11,8 @@ from .context import Context, build_context
 from .models import (
     Assignment,
     AvoidTaskRepeatRule,
+    DiverseShiftsRule,
+    FixedAreaRule,
     ForbidSequenceRule,
     MaxShiftTypeRule,
     Project,
@@ -35,6 +37,7 @@ class _Model:
         self.work: dict[tuple[int, int, int], cp_model.IntVar] = {}
         self.task: dict[tuple[int, int, int, str], cp_model.IntVar] = {}
         self.day_work: dict[tuple[int, int], cp_model.LinearExprT] = {}
+        self.area: dict[tuple[int, int, int, str], cp_model.IntVar] = {}
 
     def penalise(self, expr: cp_model.LinearExprT, weight: int) -> None:
         if weight:
@@ -94,6 +97,19 @@ class _Model:
             n = sum(var for (s, dd, tt, k), var in self.task.items() if dd == d and tt == t and k == task_id)
             self._at_least(n, need)
             m.add(n <= need)
+
+        # Areas: everyone working where areas apply is placed in exactly one.
+        for (s, d, t), var in self.work.items():
+            if not ctx.needs_area(s, d, t):
+                continue
+            for a in ctx.area_candidates(s, d, t):
+                self.area[s, d, t, a] = m.new_bool_var(f"a{s}_{d}_{t}_{a}")
+            m.add(sum(self.area[s, d, t, a] for a in ctx.area_candidates(s, d, t)) == var)
+        for (d, t, area_id, group_id), (lo, hi) in ctx.area_need.items():
+            n = sum(v for (s, dd, tt, a), v in self.area.items() if dd == d and tt == t and a == area_id and ctx.in_group(s, group_id))
+            self._at_least(n, lo)
+            if hi is not None:
+                m.add(n <= hi)
 
         # Rest between consecutive shifts.
         for s in range(S):
@@ -220,6 +236,29 @@ class _Model:
                     n = sum(self.work.get((s, d, t), 0) for d in range(D))
                     self.soft_le(n, rule.max_count, rule.hard, rule.weight, D)
 
+            elif isinstance(rule, FixedAreaRule):
+                s = ctx.staff_index[rule.staff_id]
+                for (ss, _, _, a), v in self.area.items():
+                    if ss == s and a != rule.area_id:
+                        if rule.hard:
+                            m.add(v == 0)
+                        else:
+                            self.penalise(v, rule.weight * OCCURRENCE)
+
+            elif isinstance(rule, DiverseShiftsRule):
+                s = ctx.staff_index[rule.staff_id]
+                types = [t for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
+                if len(types) < 2:
+                    continue
+                counts = [sum(self.work.get((s, d, t), 0) for d in range(D)) for t in types]
+                hi, lo = m.new_int_var(0, D, ""), m.new_int_var(0, D, "")
+                m.add_max_equality(hi, counts)
+                m.add_min_equality(lo, counts)
+                if rule.hard:
+                    m.add(hi - lo <= 1)
+                else:
+                    self.penalise(hi - lo, rule.weight * OCCURRENCE)
+
             elif isinstance(rule, ForbidSequenceRule):
                 a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]
                 for s in members:
@@ -235,8 +274,15 @@ class _Model:
         for (s, d, t, k), var in self.task.items():
             if solver.value(var):
                 tasks.setdefault((s, d, t), []).append(k)
+        areas = {(s, d, t): a for (s, d, t, a), var in self.area.items() if solver.value(var)}
         return [
-            Assignment(staff_id=ctx.staff[s].id, date=ctx.dates[d], shift_id=ctx.shifts[t].id, task_ids=tasks.get((s, d, t), []))
+            Assignment(
+                staff_id=ctx.staff[s].id,
+                date=ctx.dates[d],
+                shift_id=ctx.shifts[t].id,
+                task_ids=tasks.get((s, d, t), []),
+                area_id=areas.get((s, d, t)),
+            )
             for (s, d, t), var in sorted(self.work.items())
             if solver.value(var)
         ]

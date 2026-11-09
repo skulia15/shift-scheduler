@@ -37,6 +37,7 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
   const shiftIndex = new Map(project.shift_types.map((s, i) => [s.id, i]))
   const holidays = new Map(project.public_holidays.map((h) => [h.date, h.name]))
   const taskName = new Map(project.tasks.map((t) => [t.id, t.name]))
+  const areaCode = new Map(project.areas.map((a) => [a.id, a.code]))
   const leaveKind = useMemo(() => {
     const map = new Map<string, string>()
     for (const lv of project.leave) {
@@ -47,9 +48,9 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
     return map
   }, [project.leave])
 
-  const setCell = (staffId: string, date: ISODate, shiftId: string | null, taskIds: string[] = []) => {
+  const setCell = (staffId: string, date: ISODate, shiftId: string | null, taskIds: string[], areaId: string | null) => {
     const rest = roster.filter((a) => !(a.staff_id === staffId && a.date === date))
-    setRoster(shiftId ? [...rest, { staff_id: staffId, date, shift_id: shiftId, task_ids: taskIds }] : rest)
+    setRoster(shiftId ? [...rest, { staff_id: staffId, date, shift_id: shiftId, task_ids: taskIds, area_id: areaId }] : rest)
   }
 
   const exportCsv = () => {
@@ -60,7 +61,8 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
         const a = cell.get(`${s.id}|${d}`)
         if (!a) return ''
         const code = project.shift_types.find((t) => t.id === a.shift_id)?.code ?? a.shift_id
-        return [code, ...a.task_ids.map((t) => taskName.get(t) ?? t)].join(' ')
+        const area = a.area_id ? (areaCode.get(a.area_id) ?? a.area_id) : null
+        return [code, area, ...a.task_ids.map((t) => taskName.get(t) ?? t)].filter(Boolean).join(' ')
       }),
     ])
     const csv = [header, ...rows].map((r) => r.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')
@@ -147,7 +149,13 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
                               {a && (
                                 <>
                                   <b>{project.shift_types[t ?? 0]?.code ?? a.shift_id}</b>
-                                  {a.task_ids.length > 0 && <small>{a.task_ids.map((id) => abbreviate(taskName.get(id) ?? id)).join(' ')}</small>}
+                                  {(a.area_id || a.task_ids.length > 0) && (
+                                    <small>
+                                      {[a.area_id && (areaCode.get(a.area_id) ?? a.area_id), ...a.task_ids.map((id) => abbreviate(taskName.get(id) ?? id))]
+                                        .filter(Boolean)
+                                        .join('·')}
+                                    </small>
+                                  )}
                                 </>
                               )}
                             </td>
@@ -173,7 +181,7 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
             {project.shift_types.flatMap((shift) =>
               project.groups.map((g) => {
                 const cells = new Map(
-                  (evaluation?.coverage ?? []).filter((c) => c.shift_id === shift.id && c.group_id === g.id).map((c) => [c.date, c]),
+                  (evaluation?.coverage ?? []).filter((c) => c.shift_id === shift.id && c.group_id === g.id && !c.area_id).map((c) => [c.date, c]),
                 )
                 if (cells.size === 0) return null
                 return (
@@ -193,6 +201,34 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
                   </tr>
                 )
               }),
+            )}
+            {project.areas.flatMap((area) =>
+              project.shift_types.flatMap((shift) =>
+                project.groups.map((g) => {
+                  const cells = new Map(
+                    (evaluation?.coverage ?? [])
+                      .filter((c) => c.area_id === area.id && c.shift_id === shift.id && c.group_id === g.id)
+                      .map((c) => [c.date, c]),
+                  )
+                  if (cells.size === 0) return null
+                  return (
+                    <tr key={`${area.id}-${shift.id}-${g.id}`} className="coverage">
+                      <th className="sticky name">
+                        {area.name} · {shift.code} · {g.name}
+                      </th>
+                      {dates.map((d) => {
+                        const c = cells.get(d)
+                        return (
+                          <td key={d} className={`num ${dayClass(d, holidays)} ${c && c.assigned < c.required ? 'short' : ''}`}>
+                            {c ? `${c.assigned}/${c.required}` : ''}
+                          </td>
+                        )
+                      })}
+                      <td colSpan={4} />
+                    </tr>
+                  )
+                }),
+              ),
             )}
           </tbody>
         </table>
@@ -226,8 +262,8 @@ export function RosterView({ project, roster, setRoster, evaluation }: Props) {
           staffId={editing.staffId}
           date={editing.date}
           violations={cellViolations.get(`${editing.staffId}|${editing.date}`) ?? []}
-          onSave={(shiftId, taskIds) => {
-            setCell(editing.staffId, editing.date, shiftId, taskIds)
+          onSave={(shiftId, taskIds, areaId) => {
+            setCell(editing.staffId, editing.date, shiftId, taskIds, areaId)
             setEditing(null)
           }}
           onClose={() => setEditing(null)}
@@ -263,12 +299,13 @@ function CellEditor({
   staffId: string
   date: ISODate
   violations: Violation[]
-  onSave: (shiftId: string | null, taskIds: string[]) => void
+  onSave: (shiftId: string | null, taskIds: string[], areaId: string | null) => void
   onClose: () => void
 }) {
   const staff = project.staff.find((s) => s.id === staffId)!
   const [shiftId, setShiftId] = useState<string | null>(assignment?.shift_id ?? null)
   const [taskId, setTaskId] = useState<string>(assignment?.task_ids[0] ?? '')
+  const [areaId, setAreaId] = useState<string>(assignment?.area_id ?? '')
   const tasks = project.tasks.filter((t) => staff.group_ids.includes(t.group_id))
 
   return (
@@ -292,6 +329,19 @@ function CellEditor({
             </button>
           ))}
         </div>
+        {shiftId && project.areas.length > 0 && (
+          <label className="row">
+            Area{' '}
+            <select value={areaId} onChange={(e) => setAreaId(e.target.value)}>
+              <option value="">— none —</option>
+              {project.areas.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {shiftId && tasks.length > 0 && (
           <label>
             Task{' '}
@@ -316,7 +366,7 @@ function CellEditor({
         )}
         <div className="modal-actions">
           <button onClick={onClose}>Cancel</button>
-          <button className="primary" onClick={() => onSave(shiftId, shiftId && taskId ? [taskId] : [])}>
+          <button className="primary" onClick={() => onSave(shiftId, shiftId && taskId ? [taskId] : [], shiftId && areaId ? areaId : null)}>
             Apply
           </button>
         </div>

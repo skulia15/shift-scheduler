@@ -49,6 +49,23 @@ class Context:
     target_minutes: list[int] = field(default_factory=list)
     eligible: list[set[int]] = field(default_factory=list)  # shift indices per staff
     task_group: dict[str, str] = field(default_factory=dict)
+    area_need: dict[tuple[int, int, str, str], tuple[int, int | None]] = field(default_factory=dict)  # (d, t, area, group)
+    fixed_area: dict[int, str] = field(default_factory=dict)  # staff -> area (enabled fixed_area rules)
+    area_groups: set[tuple[int, int, str]] = field(default_factory=set)  # (d, t, group) with any area demand
+
+    def needs_area(self, staff: int, day: int, shift: int) -> bool:
+        """Whether this person, if working this shift, must be placed in an area."""
+        if staff in self.fixed_area:
+            return True
+        return any((day, shift, g) in self.area_groups for g in self.staff[staff].group_ids)
+
+    def area_candidates(self, staff: int, day: int, shift: int) -> list[str]:
+        """Areas this person could be placed in on this shift (sorted for determinism)."""
+        groups = self.staff[staff].group_ids
+        found = {a for (d, t, a, g) in self.area_need if d == day and t == shift and g in groups}
+        if staff in self.fixed_area:
+            found.add(self.fixed_area[staff])
+        return sorted(found)
 
     @property
     def n_days(self) -> int:
@@ -186,4 +203,21 @@ def build_context(project: Project) -> Context:
         )
 
     ctx.task_group = {t.id: t.group_id for t in project.tasks}
+
+    overridden_areas: set[tuple[int, int, str, str]] = set()
+    for ad in project.area_demand:
+        t = ctx.shift_index[ad.shift_id]
+        for d, day in enumerate(dates):
+            applies, is_override = _demand_applies(ad.weekdays, ad.dates, day)
+            key = (d, t, ad.area_id, ad.group_id)
+            if not applies or (key in overridden_areas and not is_override):
+                continue
+            if is_override:
+                overridden_areas.add(key)
+            ctx.area_need[key] = (ad.min, ad.max)
+
+    ctx.area_groups = {(d, t, g) for (d, t, _, g) in ctx.area_need}
+    for rule in project.custom_rules:
+        if rule.enabled and rule.type == "fixed_area":
+            ctx.fixed_area[ctx.staff_index[rule.staff_id]] = rule.area_id
     return ctx

@@ -84,6 +84,27 @@ class TaskDemand(BaseModel):
     count: int = 1
 
 
+class Area(BaseModel):
+    """A floor, wing or hallway. Staff on shift are placed in exactly one area where areas apply."""
+
+    id: str
+    code: str
+    name: str
+
+
+class AreaDemand(BaseModel):
+    """Headcount of a group in an area on a shift. A group with any area demand on a shift has every
+    working member placed in an area on that shift. `dates` entries override weekday entries."""
+
+    area_id: str
+    shift_id: str
+    group_id: str
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)))
+    dates: list[date] | None = None
+    min: int = 0
+    max: int | None = None
+
+
 class Leave(BaseModel):
     """`holiday` is reserved leave and is never scheduled over.
     A `request` is a day-off wish; once `granted` it is binding."""
@@ -203,8 +224,30 @@ class ForbidSequenceRule(_RuleBase):
     to_shift_id: str
 
 
+class FixedAreaRule(_RuleBase):
+    """A person is always placed in one area when on shift."""
+
+    type: Literal["fixed_area"] = "fixed_area"
+    staff_id: str
+    area_id: str
+
+
+class DiverseShiftsRule(_RuleBase):
+    """A person's shift-type counts stay balanced (max − min ≤ 1 when hard).
+    `shift_ids` limits which types are balanced; None = every type they may work."""
+
+    type: Literal["diverse_shifts"] = "diverse_shifts"
+    staff_id: str
+    shift_ids: list[str] | None = None
+
+
 CustomRule = Annotated[
-    AvoidTaskRepeatRule | RotateTaskEvenlyRule | MaxShiftTypeRule | ForbidSequenceRule,
+    AvoidTaskRepeatRule
+    | RotateTaskEvenlyRule
+    | MaxShiftTypeRule
+    | ForbidSequenceRule
+    | FixedAreaRule
+    | DiverseShiftsRule,
     Field(discriminator="type"),
 ]
 
@@ -226,6 +269,8 @@ class Project(BaseModel):
     tasks: list[Task] = []
     coverage: list[CoverageDemand] = []
     task_demand: list[TaskDemand] = []
+    areas: list[Area] = []
+    area_demand: list[AreaDemand] = []
     leave: list[Leave] = []
     public_holidays: list[PublicHoliday] = []
     rules: LaborRules = LaborRules()
@@ -255,6 +300,15 @@ class Project(BaseModel):
         for lv in self.leave:
             if lv.staff_id not in staff_ids:
                 problems.append(f"leave: unknown staff {lv.staff_id}")
+        area_ids = {a.id for a in self.areas}
+        for ad in self.area_demand:
+            if ad.area_id not in area_ids or ad.shift_id not in shift_ids or ad.group_id not in group_ids:
+                problems.append(f"area demand {ad.area_id}/{ad.shift_id}/{ad.group_id}: unknown area, shift or group")
+        for rule in self.custom_rules:
+            if isinstance(rule, (FixedAreaRule, DiverseShiftsRule)) and rule.staff_id not in staff_ids:
+                problems.append(f"rule {rule.id}: unknown staff {rule.staff_id}")
+            if isinstance(rule, FixedAreaRule) and rule.area_id not in area_ids:
+                problems.append(f"rule {rule.id}: unknown area {rule.area_id}")
         if problems:
             raise ValueError("; ".join(problems))
         return self
@@ -265,6 +319,7 @@ class Assignment(BaseModel):
     date: DateT
     shift_id: str
     task_ids: list[str] = []
+    area_id: str | None = None
 
 
 class Violation(BaseModel):
@@ -294,6 +349,7 @@ class CoverageCell(BaseModel):
     date: DateT
     shift_id: str
     group_id: str
+    area_id: str | None = None
     required: int
     assigned: int
 

@@ -12,6 +12,8 @@ from .models import (
     Assignment,
     AvoidTaskRepeatRule,
     CoverageCell,
+    DiverseShiftsRule,
+    FixedAreaRule,
     Evaluation,
     ForbidSequenceRule,
     MaxShiftTypeRule,
@@ -73,6 +75,7 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
 
     # (staff, day) -> (shift, tasks)
     work: dict[tuple[int, int], tuple[int, list[str]]] = {}
+    area_of: dict[tuple[int, int], str | None] = {}
     for a in roster:
         s, d, t = ctx.staff_index.get(a.staff_id), ctx.day_of.get(a.date), ctx.shift_index.get(a.shift_id)
         if s is None or d is None or t is None:
@@ -82,6 +85,7 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             v("one_shift_per_day", "error", f"{ctx.staff[s].name} has more than one shift", s, d, t)
             continue
         work[(s, d)] = (t, a.task_ids)
+        area_of[(s, d)] = a.area_id
 
     for (s, d), (t, tasks) in work.items():
         name = ctx.staff[s].name
@@ -96,6 +100,11 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
                 v("unknown_reference", "error", f"Unknown task {task_id}", s, d, t)
             elif not ctx.in_group(s, ctx.task_group[task_id]):
                 v("task_group", "error", f"{name} is not in the group that does {task_id}", s, d, t)
+        area = area_of[(s, d)]
+        if area is not None and area not in {x.id for x in ctx.project.areas}:
+            v("unknown_reference", "error", f"Unknown area {area}", s, d, t)
+        elif area is None and ctx.needs_area(s, d, t):
+            v("area_missing", "error", f"{name} has no area on this shift", s, d, t)
         if len(tasks) > 1:
             v("one_task_per_shift", "error", f"{name} has {len(tasks)} tasks on one shift", s, d, t)
 
@@ -108,6 +117,18 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             v("coverage", "error", f"{group_id}: {n} of {lo} required", d=d, t=t)
         if hi is not None and n > hi:
             v("coverage", "error", f"{group_id}: {n} exceeds maximum {hi}", d=d, t=t)
+
+    for (d, t, area_id, group_id), (lo, hi) in sorted(ctx.area_need.items()):
+        n = sum(
+            1 for (s, dd), (tt, _) in work.items() if dd == d and tt == t and area_of[(s, dd)] == area_id and ctx.in_group(s, group_id)
+        )
+        cells.append(
+            CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, group_id=group_id, area_id=area_id, required=lo, assigned=n)
+        )
+        if n < lo:
+            v("area_coverage", "error", f"{area_id} {group_id}: {n} of {lo} required", d=d, t=t)
+        if hi is not None and n > hi:
+            v("area_coverage", "error", f"{area_id} {group_id}: {n} exceeds maximum {hi}", d=d, t=t)
 
     task_done: Counter[tuple[int, int, str]] = Counter()
     for (s, d), (t, tasks) in work.items():
@@ -187,11 +208,13 @@ def evaluate(project: Project, roster: list[Assignment]) -> Evaluation:
             )
         )
 
-    _custom_rules(ctx, work, v)
+    _custom_rules(ctx, work, area_of, v)
     return Evaluation(violations=out, staff=stats, coverage=cells)
 
 
-def _custom_rules(ctx: Context, work: dict[tuple[int, int], tuple[int, list[str]]], v) -> None:
+def _custom_rules(
+    ctx: Context, work: dict[tuple[int, int], tuple[int, list[str]]], area_of: dict[tuple[int, int], str | None], v
+) -> None:
     by_staff: dict[int, dict[int, tuple[int, list[str]]]] = defaultdict(dict)
     for (s, d), entry in work.items():
         by_staff[s][d] = entry
@@ -228,6 +251,21 @@ def _custom_rules(ctx: Context, work: dict[tuple[int, int], tuple[int, list[str]
                 n = sum(1 for tt, _ in by_staff[s].values() if tt == t)
                 if n > rule.max_count:
                     v(rule.id, severity, f"{label}: {ctx.staff[s].name} works {rule.shift_id} {n}× (max {rule.max_count})", s)
+
+        elif isinstance(rule, FixedAreaRule):
+            s = ctx.staff_index[rule.staff_id]
+            for d, (t, _) in sorted(by_staff[s].items()):
+                if area_of[(s, d)] != rule.area_id:
+                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} is in {area_of[(s, d)] or 'no area'}, not {rule.area_id}", s, d, t)
+
+        elif isinstance(rule, DiverseShiftsRule):
+            s = ctx.staff_index[rule.staff_id]
+            types = [t for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
+            if len(types) >= 2:
+                counts = {ctx.shifts[t].code: sum(1 for tt, _ in by_staff[s].values() if tt == t) for t in types}
+                if max(counts.values()) - min(counts.values()) > 1:
+                    mix = ", ".join(f"{code} {n}" for code, n in counts.items())
+                    v(rule.id, severity, f"{label}: {ctx.staff[s].name} shift mix is uneven ({mix})", s)
 
         elif isinstance(rule, ForbidSequenceRule):
             a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]

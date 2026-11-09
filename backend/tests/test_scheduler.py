@@ -1,9 +1,14 @@
+from collections import Counter
 from datetime import date, timedelta
 
 import pytest
 
 from app.context import credited_minutes
 from app.models import (
+    Area,
+    AreaDemand,
+    DiverseShiftsRule,
+    FixedAreaRule,
     Assignment,
     CoverageDemand,
     ForbidSequenceRule,
@@ -114,3 +119,42 @@ def test_target_hours_scale_with_employment_percent(percent, expected_hours):
     project = small_project(staff=[Staff(id="s0", name="A", group_ids=["g"], employment_percent=percent)], coverage=[])
     stats = evaluate(project, []).staff[0]
     assert stats.target_hours == expected_hours
+
+
+def area_project(**overrides) -> Project:
+    return small_project(
+        areas=[Area(id="A", code="A", name="A"), Area(id="B", code="B", name="B")],
+        area_demand=[AreaDemand(area_id=a, shift_id="D", group_id="g", min=1) for a in ("A", "B")],
+        coverage=[CoverageDemand(shift_id="D", group_id="g", min=2, max=2), CoverageDemand(shift_id="E", group_id="g", min=1, max=1)],
+        **overrides,
+    )
+
+
+def test_everyone_on_an_area_shift_is_placed_and_area_headcount_met():
+    result = solve(area_project())
+    assert errors(result) == []
+    day_shifts = [a for a in result.roster if a.shift_id == "D"]
+    assert all(a.area_id in ("A", "B") for a in day_shifts)
+    assert all(a.area_id is None for a in result.roster if a.shift_id == "E")
+
+
+def test_fixed_area_rule_pins_person_to_their_area():
+    rule = FixedAreaRule(id="pin", staff_id="s0", area_id="B", hard=True)
+    result = solve(area_project(custom_rules=[rule]))
+    mine = [a for a in result.roster if a.staff_id == "s0"]
+    assert mine and all(a.area_id == "B" for a in mine)
+
+
+def test_validator_flags_wrong_area_for_pinned_person():
+    rule = FixedAreaRule(id="pin", staff_id="s0", area_id="B", hard=True)
+    roster = [Assignment(staff_id="s0", date=START, shift_id="D", area_id="A")]
+    found = {(v.rule, v.severity) for v in evaluate(area_project(custom_rules=[rule]), roster).violations}
+    assert ("pin", "error") in found
+
+
+def test_diverse_shifts_rule_balances_a_persons_shift_mix():
+    rule = DiverseShiftsRule(id="mix", staff_id="s0", hard=True)
+    result = solve(small_project(custom_rules=[rule]))
+    counts = Counter(a.shift_id for a in result.roster if a.staff_id == "s0")
+    assert max(counts[t] for t in "DEN") - min(counts[t] for t in "DEN") <= 1
+    assert not [v for v in result.violations if v.rule == "mix"]

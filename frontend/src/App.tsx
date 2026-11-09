@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from './api'
 import { download, usePersisted } from './store'
 import type { Assignment, Evaluation, Project, SolveResult } from './types'
@@ -13,7 +13,9 @@ type Tab = (typeof TABS)[number]
 
 export default function App() {
   const [tab, setTab] = usePersisted<Tab>('tab', 'Roster')
-  const [project, setProject] = usePersisted<Project | null>('project', null)
+  const [stored, setProject] = usePersisted<Project | null>('project', null)
+  // Projects saved before areas existed lack these fields.
+  const project = useMemo(() => (stored ? { ...stored, areas: stored.areas ?? [], area_demand: stored.area_demand ?? [] } : null), [stored])
   const [roster, setRoster] = usePersisted<Assignment[]>('roster', [])
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null)
   const [solveInfo, setSolveInfo] = useState<Pick<SolveResult, 'status' | 'message' | 'solve_seconds'> | null>(null)

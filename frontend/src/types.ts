@@ -49,6 +49,22 @@ export interface TaskDemand {
   count: number
 }
 
+export interface Area {
+  id: string
+  code: string
+  name: string
+}
+
+export interface AreaDemand {
+  area_id: string
+  shift_id: string
+  group_id: string
+  weekdays: number[]
+  dates: ISODate[] | null
+  min: number
+  max: number | null
+}
+
 export interface Leave {
   staff_id: string
   start: ISODate
@@ -111,6 +127,8 @@ export type CustomRule =
   | (RuleBase & { type: 'rotate_task_evenly'; group_id: string; task_id: string; proportional_to_employment: boolean })
   | (RuleBase & { type: 'max_shift_type'; group_id: string; shift_id: string; max_count: number })
   | (RuleBase & { type: 'forbid_sequence'; group_id: string | null; from_shift_id: string; to_shift_id: string })
+  | (RuleBase & { type: 'fixed_area'; staff_id: string; area_id: string })
+  | (RuleBase & { type: 'diverse_shifts'; staff_id: string; shift_ids: string[] | null })
 
 export interface Project {
   name: string
@@ -121,6 +139,8 @@ export interface Project {
   tasks: Task[]
   coverage: CoverageDemand[]
   task_demand: TaskDemand[]
+  areas: Area[]
+  area_demand: AreaDemand[]
   leave: Leave[]
   public_holidays: PublicHoliday[]
   rules: LaborRules
@@ -134,6 +154,7 @@ export interface Assignment {
   date: ISODate
   shift_id: string
   task_ids: string[]
+  area_id: string | null
 }
 
 export interface Violation {
@@ -163,6 +184,7 @@ export interface CoverageCell {
   date: ISODate
   shift_id: string
   group_id: string
+  area_id: string | null
   required: number
   assigned: number
 }

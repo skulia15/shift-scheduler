@@ -134,6 +134,7 @@ export function SetupView({ project, setProject }: Props) {
                       set({
                         staff: removeAt(p.staff, i),
                         leave: p.leave.filter((l) => l.staff_id !== s.id),
+                        custom_rules: p.custom_rules.filter((r) => !('staff_id' in r && r.staff_id === s.id)),
                       })
                     }
                   >
@@ -162,6 +163,35 @@ export function SetupView({ project, setProject }: Props) {
           }
         >
           + Staff member
+        </button>
+      </Section>
+
+      <Section title="Areas" hint="Floors, wings or hallways. Set how many people each area needs under Demand.">
+        {p.areas.map((a, i) => (
+          <div key={a.id} className="row">
+            <TextField width={40} value={a.code} onChange={(code) => set({ areas: patchAt(p.areas, i, { code }) })} />
+            <TextField value={a.name} onChange={(name) => set({ areas: patchAt(p.areas, i, { name }) })} />
+            <button
+              className="link"
+              onClick={() =>
+                set({
+                  areas: removeAt(p.areas, i),
+                  area_demand: p.area_demand.filter((d) => d.area_id !== a.id),
+                  custom_rules: p.custom_rules.filter((r) => !(r.type === 'fixed_area' && r.area_id === a.id)),
+                })
+              }
+            >
+              remove
+            </button>
+          </div>
+        ))}
+        <button
+          onClick={() => {
+            const id = newId('area', p.areas)
+            set({ areas: [...p.areas, { id, code: String.fromCharCode(65 + p.areas.length), name: 'New area' }] })
+          }}
+        >
+          + Area
         </button>
       </Section>
 
