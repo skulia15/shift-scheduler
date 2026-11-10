@@ -64,3 +64,14 @@ def test_validator_flags_a_broken_link():
     roster = [Assignment(staff_id="s0", date=START + timedelta(days=5), shift_id="E")]
     hits = [v for v in evaluate(small_project(custom_rules=[rule]), roster).violations if v.rule == "l"]
     assert len(hits) == 1 and hits[0].date == START + timedelta(days=6)
+
+
+def test_count_notes_read_preferred_and_linked_shifts():
+    from app.workbook import linked_shift, parse_staffing_note, preferred_count
+
+    assert preferred_count("alla daga - helst að hafa 5") == 5
+    rules, certain, _ = parse_staffing_note("alla daga - helst að hafa 5", observed_min=5, observed_median=5)
+    assert rules == [([0, 1, 2, 3, 4, 5, 6], 4, None)] and not certain
+    late = ShiftType(id="L", code="L", name="Late", start="17:00", end="23:00")
+    assert linked_shift("lau - 1; sú á laugardegi fær 17:00-23:00 á sun", [DAY, late]) == (5, "L", 1)
+    assert linked_shift("lau - 1", [DAY, late]) is None

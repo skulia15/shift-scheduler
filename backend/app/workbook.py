@@ -23,7 +23,7 @@ from openpyxl import load_workbook
 from pydantic import BaseModel, Field
 
 from .holidays import holidays_between
-from .models import Assignment, CoverageDemand, Period, Project, ShiftType, Staff, StaffGroup
+from .models import Assignment, CoverageDemand, LinkedShiftRule, Period, Project, ShiftType, Staff, StaffGroup, parse_clock
 from .wishes import WishSuggestion, suggest_rules
 
 TIME_RANGE = re.compile(r"^\s*(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})\s*$")
@@ -225,6 +225,10 @@ def parse_staffing_note(note: str, observed_min: int, observed_median: int) -> t
         return [(days, 0, cap)], True, "optional shift (min 0)"
     if "helst" in t:
         days = _weekday_set(t) or ALL
+        want = preferred_count(t)
+        if want:
+            lo = min(observed_min, want - 1)
+            return [(days, lo, None)], False, f"preferred {want}; minimum set to {lo} (check it)"
         return [(days, observed_min, None)], False, f"preferred, not required; set to the lowest count in the sheet ({observed_min})"
     clauses = [c for c in re.split(r";", t) if c.strip()]
     for k, clause in enumerate(clauses):
@@ -252,6 +256,31 @@ def parse_staffing_note(note: str, observed_min: int, observed_median: int) -> t
     if guessed:
         return rules, False, f"no count in the note; set to the usual count in the sheet ({observed_median})"
     return rules, True, "read from the note"
+
+
+def preferred_count(note: str) -> int | None:
+    """'helst að hafa 6' -> 6."""
+    m = re.search(r"helst\D{0,15}?(\d{1,2})\b", _CLOCK.sub(" ", note.casefold()))
+    return int(m.group(1)) if m else None
+
+
+_LINK_DAYS = {"mán": 0, "þri": 1, "mið": 2, "fim": 3, "fös": 4, "lau": 5, "sun": 6}
+_LINK = re.compile(
+    r"á\s+(mán|þri|mið|fim|fös|lau|sun)\w*\s+fær\s+(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})\s+á\s+(mán|þri|mið|fim|fös|lau|sun)"
+)
+
+
+def linked_shift(note: str, shift_types: list[ShiftType]) -> tuple[int, str, int] | None:
+    """'sú sem er á þessari vakt á laugardegi fær 17:00-23:00 á sun' -> (weekday, shift id, days after)."""
+    m = _LINK.search(note.casefold())
+    if not m:
+        return None
+    start, end = int(m.group(2)) * 60 + int(m.group(3)), (int(m.group(4)) * 60 + int(m.group(5))) % (24 * 60)
+    target = next((s for s in shift_types if s.start_minute == start and parse_clock(s.end) % (24 * 60) == end), None)
+    if target is None:
+        return None
+    a, b = _LINK_DAYS[m.group(1)], _LINK_DAYS[m.group(6)]
+    return a, target.id, (b - a) % 7 or 7
 
 
 # ---------------------------------------------------------------- import
@@ -359,6 +388,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         if a.staff_id in counted:
             daily[a.shift_id][dates.index(a.date)] += 1
     coverage: list[CoverageDemand] = []
+    links: list[LinkedShiftRule] = []
     staffing: list[StaffingRead] = []
     labelled = []
     for r in count_rows:
@@ -387,8 +417,34 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         seen = daily[sid]
         observed_min, observed_median = min(seen), sorted(seen)[len(seen) // 2]
         rules, certain, how = parse_staffing_note(note, observed_min, observed_median)
+        low = note.casefold()
+        want = preferred_count(low) if "helst" in low else None
+        fallback = "þarf ekki alltaf" in low
+        kind = next(s.kind for s in shift_types if s.id == sid)
+        main = next((s.id for s in shift_types if s.code == {"morning": "M", "evening": "K", "night": "N"}[kind] and s.id != sid), None)
         for days, lo, hi in rules:
-            coverage.append(CoverageDemand(shift_id=sid, group_id=GROUP_ID, weekdays=days, min=lo, max=hi, note=note))
+            coverage.append(
+                CoverageDemand(
+                    shift_id=sid,
+                    group_id=GROUP_ID,
+                    weekdays=days,
+                    min=lo,
+                    max=hi,
+                    preferred=want,
+                    fallback=fallback,
+                    covers_shift_id=main if fallback else None,
+                    note=note,
+                )
+            )
+        if fallback and main:
+            how += f"; counts towards {next(s.code for s in shift_types if s.id == main)} when used"
+        link = linked_shift(note, shift_types)
+        if link:
+            weekday, to_id, after = link
+            links.append(
+                LinkedShiftRule(id=f"link{len(links) + 1}", from_shift_id=sid, weekdays=[weekday], to_shift_id=to_id, days_after=after, hard=False, weight=40, description=note)
+            )
+            how += f"; linked to {next(s.code for s in shift_types if s.id == to_id)} {after} day(s) later"
         staffing.append(
             StaffingRead(
                 note=note,
@@ -407,6 +463,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         groups=[StaffGroup(id=GROUP_ID, name="Starfsfólk" if lang == "is" else "Staff")],
         staff=staff,
         coverage=coverage,
+        custom_rules=links,
         public_holidays=holidays_between(period.start, period.days),
         solve_seconds=30,
     )

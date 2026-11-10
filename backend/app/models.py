@@ -249,7 +249,7 @@ class Weights(BaseModel):
     overstaff: int = 1
     coverage_shortfall: int = 500
     preferred_shortfall: int = 30  # each person below a preferred headcount
-    fallback_use: int = 10  # each person on a fallback shift
+    fallback_use: int = 25  # each person on a fallback shift; below preferred_shortfall so it fills preferred gaps only
 
 
 class _RuleBase(BaseModel):
