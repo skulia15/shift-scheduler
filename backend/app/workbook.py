@@ -23,7 +23,7 @@ from openpyxl import load_workbook
 from pydantic import BaseModel, Field
 
 from .holidays import holidays_between
-from .models import Assignment, CoverageDemand, LinkedShiftRule, Period, Project, ShiftType, Staff, StaffGroup, parse_clock
+from .models import Assignment, CoverageDemand, Leave, LinkedShiftRule, Period, Project, ShiftType, Staff, StaffGroup, parse_clock
 from .wishes import WishSuggestion, suggest_rules
 
 TIME_RANGE = re.compile(r"^\s*(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})\s*$")
@@ -269,6 +269,43 @@ def parse_staffing_note(note: str, observed_min: int, observed_median: int) -> t
     return rules, True, "read from the note"
 
 
+def _solid(fills: list[str | None], cols: list[int]) -> str | None:
+    """The one colour filling every day cell of a row, as 6-digit hex, if there is one."""
+    seen = {fills[c] if c < len(fills) else None for c in cols}
+    colour = seen.pop() if len(seen) == 1 else None
+    return colour[-6:] if colour else None
+
+
+# The planner's absence colours: black and grey cells, or a whole row in one colour.
+# Black reads as "can't work" (a granted day off), grey as holiday leave (orlof).
+_ABSENCE = {"000000": ("request", "Svartur reitur í skýrslunni"), "A6A6A6": ("holiday", "Grár reitur í skýrslunni")}
+
+
+def _absences(staff_id: str, row: list[object], fills: list[str | None], cols: list[int], dates: list[date]) -> list[Leave]:
+    """Leave from coloured cells with no shift: black and grey runs, or a person's whole row in one
+    colour (away the whole period)."""
+    whole = _solid(fills, cols)
+    if whole and not any(_time_range(row[c]) for c in cols if c < len(row)) and whole.upper() not in KIND_COLOURS:
+        return [Leave(staff_id=staff_id, start=dates[0], end=dates[-1], kind="holiday", note=f"Allt tímabilið (litur {whole} í skýrslunni)")]
+    out: list[Leave] = []
+    run: tuple[str, int] | None = None
+    for k, c in enumerate([*cols, None]):
+        colour = (fills[c][-6:].upper() if c is not None and c < len(fills) and fills[c] else None)
+        has_shift = c is not None and c < len(row) and _time_range(row[c])
+        colour = colour if colour in _ABSENCE and not has_shift else None
+        if run and colour != run[0]:
+            kind, note = _ABSENCE[run[0]]
+            out.append(Leave(staff_id=staff_id, start=dates[run[1]], end=dates[k - 1], kind=kind, granted=kind == "request", note=note))
+            run = None
+        if colour and not run:
+            run = (colour, k)
+    return out
+
+
+# Shift fills in planners' sheets (blue, green, orange): never read as absence.
+KIND_COLOURS = {"94DCF8", "DAF2D0", "F1A983"}
+
+
 def preferred_count(note: str) -> int | None:
     """'helst að hafa 6' -> 6."""
     m = re.search(r"helst\D{0,15}?(\d{1,2})\b", _CLOCK.sub(" ", note.casefold()))
@@ -370,7 +407,15 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
     named = name_col is not None
     names = mock_names(len(people_rows), avoid) if not named else []
     staff: list[Staff] = []
+    leave: list[Leave] = []
     roster: list[Assignment] = []
+    # A row filled with one colour across the days, between people and with nobody's data, divides
+    # the staff into sections (the planner's coloured lines).
+    dividers = [
+        r
+        for r in range(min(people_rows, default=0), max(people_rows, default=0))
+        if r not in people_rows and r not in count_rows and _solid(fills[r], cols) and not any(_time_range(values[r][c]) for c in cols if c < len(values[r]))
+    ]
     worked_minutes: dict[str, int] = {}
     for i, r in enumerate(people_rows):
         row = values[r]
@@ -393,7 +438,10 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         else:
             percent = round(min(fraction, 1) * 100)
         note = str(row[wish_col]).strip() if wish_col is not None and wish_col < len(row) and row[wish_col] else ""
-        staff.append(Staff(id=sid, name=name, group_ids=[GROUP_ID], employment_percent=percent, note=note))
+        section = sum(1 for d in dividers if d < r)
+        groups = [f"{GROUP_ID}{section + 1}", GROUP_ID] if section else [GROUP_ID]
+        staff.append(Staff(id=sid, name=name, group_ids=groups, employment_percent=percent, note=note))
+        leave += _absences(sid, row, fills[r], cols, dates)
 
     # Count rows → staffing rows on the clock time whose daily counts they match.
     # The count formulas cover the people listed above them; rows further down are often extras.
@@ -477,13 +525,24 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         name=sheet.title if sheet.title.casefold() not in ("sheet1", "blað1") else ("Deildin" if lang == "is" else "The unit"),
         period=period,
         shift_types=shift_types,
-        groups=[StaffGroup(id=GROUP_ID, name="Starfsfólk" if lang == "is" else "Staff")],
+        groups=[StaffGroup(id=GROUP_ID, name="Starfsfólk" if lang == "is" else "Staff")]
+        + [
+            StaffGroup(id=f"{GROUP_ID}{k + 2}", name=(f"Hópur {k + 2}" if lang == "is" else f"Section {k + 2}"), color=_solid(fills[d], cols))
+            for k, d in enumerate(dividers)
+        ],
+        leave=leave,
         staff=staff,
         coverage=coverage,
         custom_rules=links,
         public_holidays=holidays_between(period.start, period.days),
         solve_seconds=30,
     )
+    if leave:
+        black = sum(1 for lv in leave if lv.kind == "request")
+        warnings.append(
+            f"{len(leave)} absences read from coloured cells: {black} black (read as can't work, a granted day off), "
+            f"{len(leave) - black} grey or whole-row (read as holiday leave). Check them under Leave."
+        )
     return WorkbookImport(
         project=project,
         roster=roster,

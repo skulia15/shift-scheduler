@@ -65,6 +65,7 @@ class ShiftType(BaseModel):
 class StaffGroup(BaseModel):
     id: str
     name: str
+    color: str | None = Field(None, description="Hex colour of the divider row above the group in exported sheets")
 
 
 class Staff(BaseModel):

@@ -1,6 +1,6 @@
 """Staffing that matches practice: preferred headcount, fallback shifts, linked shifts."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from app.models import Assignment, CoverageDemand, LinkedShiftRule, ShiftType, Staff
 from app.solver import solve
@@ -105,3 +105,39 @@ def test_export_starts_with_the_planners_layout_and_reads_back():
     assert any(str(c.value).startswith("=COUNTIF(") for row in ws.iter_rows() for c in row)
     back = import_workbook(data)
     assert back.people == 6 and back.shifts_imported == len(roster)
+
+
+def test_workbook_absences_and_sections_come_in():
+    """Black and grey cells become leave, a whole coloured row is away all period, an orange line starts a section."""
+    import io
+
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill
+
+    from app.workbook import import_workbook
+
+    days = [date(2027, 1, 4) + timedelta(days=k) for k in range(7)]
+    wb = Workbook()
+    ws = wb.active
+    ws.append([*days, "Hlutfall"])
+    ws.append(["08:00-16:00", None, None, None, None, None, "08:00-16:00", 0.5])  # black on days 2-3
+    ws.append([None] * 7 + [0.8])  # red all period
+    ws.append([None] * 7)  # orange divider
+    ws.append(["16:00-24:00", None, None, None, None, None, None, 0.5])  # grey on days 4-6
+    black, grey = PatternFill("solid", fgColor="FF000000"), PatternFill("solid", fgColor="FFA6A6A6")  # as Excel writes them
+    for c in (2, 3):
+        ws.cell(row=2, column=c).fill = black
+    for c in range(1, 8):
+        ws.cell(row=3, column=c).fill = PatternFill("solid", fgColor="C00000")
+        ws.cell(row=4, column=c).fill = PatternFill("solid", fgColor="ED7D31")
+    for c in (4, 5, 6):
+        ws.cell(row=5, column=c).fill = grey
+    out = io.BytesIO()
+    wb.save(out)
+    p = import_workbook(out.getvalue()).project
+    by = {(lv.staff_id, lv.start, lv.end, lv.kind, lv.granted) for lv in p.leave}
+    assert ("p1", days[1], days[2], "request", True) in by
+    assert ("p2", days[0], days[6], "holiday", False) in by
+    assert ("p3", days[3], days[5], "holiday", False) in by
+    assert [s.group_ids[0] for s in p.staff] == ["staff", "staff", "staff2"]
+    assert p.groups[1].color == "ED7D31"

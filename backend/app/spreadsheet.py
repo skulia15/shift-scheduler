@@ -395,9 +395,9 @@ def export_roster(project: Project, roster: list[Assignment]) -> bytes:
 
 KIND_FILLS = {"morning": "94DCF8", "evening": "DAF2D0", "night": "F1A983"}
 # The planner's sheet: weekends light yellow, Christmas/New Year (stórhátíðir) peach, holiday leave
-# grey, sick leave black, and a coloured full row between staff groups.
+# grey, sick leave and granted days off black, and a coloured full row between staff groups.
 WEEKEND_FILL, MAJOR_FILL = "FFFFCC", "FCE4D6"
-LEAVE_FILLS = {"holiday": "A6A6A6", "sick": "000000"}
+LEAVE_FILLS = {"holiday": "A6A6A6", "sick": "000000", "request": "000000"}  # request: a granted day off
 GROUP_FILLS = ["C00000", "7030A0", "ED7D31", "00B050", "0070C0"]
 
 
@@ -453,7 +453,7 @@ def _planner_sheet(wb: Workbook, project: Project, roster: list[Assignment], ev)
             r = ws.max_row
             for col in range(1, last_day + 1):
                 c = ws.cell(row=r, column=col)
-                c.fill = fill(GROUP_FILLS[(k - 1) % len(GROUP_FILLS)])
+                c.fill = fill((group.color if group and group.color else None) or GROUP_FILLS[(k - 1) % len(GROUP_FILLS)])
                 c.font = Font(name="Verdana", size=9, bold=True, color="FFFFFF")
         for person in people:
             st = stats.get(person.id)
