@@ -35,11 +35,21 @@ export interface I18n {
   /** "8 Dec" / "8. des." */
   dayMonth: (date: ISODate) => string
   month: (date: ISODate) => string
+  /** "08:00–16:00" / "kl. 08–16" (a 00:00 end reads as midnight). */
+  timeRange: (start: string, end: string) => string
+  /** One-letter leave marks: R G F S in English, Ó S O V in Icelandic. */
+  leaveLetter: (kind: 'request' | 'granted' | 'holiday' | 'sick') => string
 }
 
+const LEAVE_LETTERS = {
+  en: { request: 'R', granted: 'G', holiday: 'F', sick: 'S' },
+  is: { request: 'Ó', granted: 'S', holiday: 'O', sick: 'V' },
+} as const
+
 export function makeI18n(lang: Lang): I18n {
+  // "Name|shift" is a key with context: English shows the part before the bar.
   const t = (en: string, vars?: Record<string, string | number>) => {
-    let text = lang === 'is' ? (IS[en] ?? en) : en
+    let text = lang === 'is' ? (IS[en] ?? en.split('|')[0]) : en.split('|')[0]
     if (vars) for (const [k, v] of Object.entries(vars)) text = text.replaceAll(`{${k}}`, String(v))
     return text
   }
@@ -61,6 +71,15 @@ export function makeI18n(lang: Lang): I18n {
     day: (date) => `${WEEKDAYS[lang][wd(date)]} ${dayMonth(date)}`,
     dayMonth,
     month,
+    timeRange: (start, end) => {
+      if (lang === 'en') return `${start}–${end === '24:00' ? '00:00' : end}`
+      const short = (x: string, isEnd: boolean) => {
+        const v = isEnd && (x === '00:00' || x === '24:00') ? '24:00' : x
+        return v.endsWith(':00') ? v.slice(0, 2) : v
+      }
+      return `kl. ${short(start, false)}–${short(end, true)}`
+    },
+    leaveLetter: (kind) => LEAVE_LETTERS[lang][kind],
   }
 }
 

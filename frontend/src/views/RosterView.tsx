@@ -5,6 +5,7 @@ import { PageHead } from '../components/fields'
 import { AlertIcon, CheckIcon, CloseIcon, DotsIcon, ErrorDot, LockIcon, RefreshIcon, UndoIcon, WarnDot } from '../components/icons'
 import { periodDates, weekday } from '../dates'
 import { useI18n } from '../i18n'
+import { holidayNote } from '../holidayNotes'
 import { shiftColor } from '../shiftColors'
 import { download } from '../store'
 import type { Assignment, Change, CoverageCell, Evaluation, ImportResult, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
@@ -60,6 +61,13 @@ export function RosterView(props: Props) {
   const [importReport, setImportReport] = useState<ImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
+  // "Unlock that cell and regenerate": regenerate once the unlocked roster has been saved.
+  const [unlockThenRegenerate, setUnlockThenRegenerate] = useState(false)
+  useEffect(() => {
+    if (!unlockThenRegenerate) return
+    setUnlockThenRegenerate(false)
+    run('regenerate')
+  }, [unlockThenRegenerate, run])
 
   const cell = useMemo(() => {
     const map = new Map<string, Assignment>()
@@ -329,9 +337,11 @@ export function RosterView(props: Props) {
                   onClick={() => {
                     const v = lockedConflicts[0]
                     setRoster(roster.map((a) => (a.staff_id === v.staff_id && a.date === v.date ? { ...a, locked: false } : a)))
+                    setRegenOpen(false)
+                    setUnlockThenRegenerate(true)
                   }}
                 >
-                  {t('Unlock that cell')}
+                  {t('Unlock that cell and regenerate')}
                 </button>
                 <button className="btn" onClick={() => select({ kind: 'person', staffId: lockedConflicts[0].staff_id!, date: lockedConflicts[0].date! })}>
                   {t('Show the cell')}
@@ -385,20 +395,20 @@ export function RosterView(props: Props) {
                   <span className="badge xs" style={{ background: c.bg, color: c.fg }}>
                     {s.code}
                   </span>
-                  {s.name} {s.start}–{s.end}
+                  {s.name} {i.timeRange(s.start, s.end)}
                 </span>
               )
             })}
             <details className="key">
               <summary>{t('Key to marks')}</summary>
               <div className="key-panel">
-                <span className="cell leave-request">R</span>
+                <span className="cell leave-request">{i.leaveLetter('request')}</span>
                 <span>{t('Requested day off')}</span>
-                <span className="cell leave-granted">G</span>
+                <span className="cell leave-granted">{i.leaveLetter('granted')}</span>
                 <span>{t('Granted day off')}</span>
-                <span className="cell leave-holiday">F</span>
+                <span className="cell leave-holiday">{i.leaveLetter('holiday')}</span>
                 <span>{t('Holiday leave (frí)')}</span>
-                <span className="cell leave-sick">S</span>
+                <span className="cell leave-sick">{i.leaveLetter('sick')}</span>
                 <span>{t('Sick')}</span>
                 <LockIcon size={14} />
                 <span>{t('Your edit, locked: regenerating keeps it')}</span>
@@ -494,7 +504,7 @@ export function RosterView(props: Props) {
                   {dates.map((d) => {
                     const h = holidays.get(d)
                     return (
-                      <th key={d} className={dayClass(d, holidays) + (h?.high_from ? ' eve' : '')} title={h ? h.name : weekday(d) >= 5 ? t('Weekend') : undefined}>
+                      <th key={d} className={dayClass(d, holidays) + (h?.high_from ? ' eve' : '')} title={h ? `${h.name}: ${holidayNote(h, i, false)}` : weekday(d) >= 5 ? t('Weekend') : undefined}>
                         <span className="wd">{i.weekdayShort(d)}</span>
                         <span className="num">{Number(d.slice(8))}</span>
                       </th>
@@ -504,7 +514,7 @@ export function RosterView(props: Props) {
                     {t('Hours')}
                     <span className="sub">{t('credited / target')}</span>
                   </th>
-                  <th className="stat" title={t('Weekends worked')}>
+                  <th className="stat" title={t('Weekends worked of {n}', { n: weekendCount })}>
                     {t('Wknd')}
                     <span className="sub">{t('of {n}', { n: weekendCount })}</span>
                   </th>
@@ -553,7 +563,7 @@ export function RosterView(props: Props) {
                                 ? [a.area_id && (areaCode.get(a.area_id) ?? a.area_id), ...a.task_ids.map((id) => abbreviate(taskName.get(id) ?? id))].filter(Boolean).join('·')
                                 : ''
                               const selected = sel?.kind === 'person' && sel.staffId === s.id && sel.date === d
-                              const leaveLetter = leave === 'request' ? 'R' : leave === 'granted' ? 'G' : leave === 'holiday' ? 'F' : leave === 'sick' ? 'S' : ''
+                              const leaveLetter = leave ? i.leaveLetter(leave) : ''
                               const focusable = selected || (!sel && s.id === people[0]?.id && d === dates[0])
                               return (
                                 <td key={d} className={`slot ${dayClass(d, holidays)}`} role="gridcell" aria-selected={selected}>
@@ -825,7 +835,7 @@ function SelectionPanel({
             </p>
           </div>
           <span className="badge lg" style={{ background: color.bg, color: color.fg }}>
-            {info?.s.code ?? (leave === 'holiday' ? 'F' : '–')}
+            {info?.s.code ?? (leave === 'holiday' ? i.leaveLetter('holiday') : '–')}
           </span>
         </div>
         <div className="neighbours">{[-1, 0, 1].map((n) => neighbour(addDays(sel.date, n), n === 0))}</div>

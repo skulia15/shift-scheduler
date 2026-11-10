@@ -48,12 +48,12 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
         id: s.id as string | null,
         code: s.code,
         name: s.name,
-        time: `${s.start}–${s.end}`,
+        time: i.timeRange(s.start, s.end),
         color: shiftColor(idx),
         allowed: staff.allowed_shift_ids === null || staff.allowed_shift_ids.includes(s.id),
       })),
     ],
-    [project.shift_types, staff.allowed_shift_ids, t],
+    [project.shift_types, staff.allowed_shift_ids, i, t],
   )
 
   // Preview: check the roster with each option and describe what changes around this person and day.

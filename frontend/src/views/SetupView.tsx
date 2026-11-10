@@ -211,7 +211,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                 <thead>
                   <tr>
                     <th>{t('Code')}</th>
-                    <th>{t('Name')}</th>
+                    <th>{t('Name|shift')}</th>
                     <th>{t('Starts')}</th>
                     <th>{t('Ends')}</th>
                     <th>{t('Unpaid break')}</th>
@@ -357,7 +357,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                         </td>
                       )}
                       <td>
-                        <NumberField width={80} nullable placeholder={t('Off')} value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, idx, { target_hours_override: v }) })} />
+                        <NumberField width={80} nullable placeholder={t('Auto')} value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, idx, { target_hours_override: v }) })} />
                       </td>
                       <td className="right">
                         <RemoveButton label={t('Remove {name}', { name: s.name })} onClick={() => removePerson(idx)} />

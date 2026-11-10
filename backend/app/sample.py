@@ -78,7 +78,7 @@ def sample_project(lang: str = "en") -> Project:
     ]
 
     return Project(
-        name="Hjúkrunarheimili — 2. hæð (demo)",
+        name="Hjúkrunarheimili — 2. hæð",
         period=Period(start=date(2026, 11, 30), days=28),
         shift_types=[
             ShiftType(id="M", code="M", name="Morgunvakt", start="08:00", end="16:00"),
@@ -141,7 +141,7 @@ def sample_project(lang: str = "en") -> Project:
         custom_rules=[
             AvoidTaskRepeatRule(
                 id="bath-repeat",
-                description="Sami starfsmaður baðar ekki tvo daga í röð" if icelandic else "Floor staff should not bathe residents two days running",
+                description="Sami starfsmaður baðar ekki íbúa tvo daga í röð" if icelandic else "Floor staff should not bathe residents two days running",
                 group_id="floor",
                 task_id="bath",
                 max_count=1,
@@ -150,7 +150,7 @@ def sample_project(lang: str = "en") -> Project:
             ),
             RotateTaskEvenlyRule(
                 id="dining-rotation",
-                description="Matsalur skiptist jafnt milli starfsfólks í umönnun" if icelandic else "Dining room duty rotates evenly among floor staff",
+                description="Vakt í matsal dreifist jafnt á starfsfólk í umönnun" if icelandic else "Dining room duty rotates evenly among floor staff",
                 group_id="floor",
                 task_id="dining",
                 proportional_to_employment=True,
@@ -158,7 +158,7 @@ def sample_project(lang: str = "en") -> Project:
             ),
             RotateTaskEvenlyRule(
                 id="bath-rotation",
-                description="Böðun skiptist jafnt milli starfsfólks í umönnun" if icelandic else "Bathing rotates evenly among floor staff",
+                description="Böðun dreifist jafnt á starfsfólk í umönnun" if icelandic else "Bathing rotates evenly among floor staff",
                 group_id="floor",
                 task_id="bath",
                 proportional_to_employment=True,
@@ -166,20 +166,20 @@ def sample_project(lang: str = "en") -> Project:
             ),
             FixedAreaRule(
                 id="lilja-hallway",
-                description="Lilja er alltaf á Gangi A" if icelandic else "Lilja always works in Gangur A",
+                description="Lilja vinnur alltaf á Gangi A" if icelandic else "Lilja always works in Gangur A",
                 staff_id="f1",
                 area_id="A",
                 hard=True,
             ),
             DiverseShiftsRule(
                 id="petra-variety",
-                description="Petra vill fjölbreyttar vaktir" if icelandic else "Petra wants a varied mix of shifts",
+                description="Petra vill fjölbreytta blöndu af vöktum" if icelandic else "Petra wants a varied mix of shifts",
                 staff_id="f5",
                 weight=15,
             ),
             MaxShiftTypeRule(
                 id="floor-nights",
-                description="Starfsfólk í umönnun tekur mest 8 næturvaktir á tímabilinu" if icelandic else "Floor staff work at most 8 night shifts per period",
+                description="Starfsfólk í umönnun tekur mest 8 næturvaktir á tímabili" if icelandic else "Floor staff work at most 8 night shifts per period",
                 group_id="floor",
                 shift_id="N",
                 max_count=8,

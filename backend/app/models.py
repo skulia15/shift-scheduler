@@ -157,9 +157,9 @@ class WeightBand(BaseModel):
 def _icelandic_bands() -> list[WeightBand]:
     return [
         WeightBand(name="Weekday evening", days="weekday", start="17:00", end="24:00", weight=1.05),
-        WeightBand(name="Weekend / holiday day", days="weekend_or_holiday", start="08:00", end="24:00", weight=1.05),
+        WeightBand(name="Weekend and holiday days", days="weekend_or_holiday", start="08:00", end="24:00", weight=1.05),
         WeightBand(name="Night", days="all", start="00:00", end="08:00", weight=1.2),
-        WeightBand(name="Christmas / New Year evening (165%)", days="high_holiday", start="00:00", end="24:00", weight=1.2),
+        WeightBand(name="Christmas and New Year evening", days="high_holiday", start="16:00", end="24:00", weight=1.2),
     ]
 
 

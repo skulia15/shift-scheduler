@@ -25,73 +25,74 @@ interface Limit {
 
 const LIMIT_GROUPS: { name: string; fields: Limit[]; toggles?: ('days_off_consecutive' | 'days_off_hard' | 'lone_night_warning')[] }[] = [
   {
-    name: 'Hours',
+    name: 'Hours|group',
     fields: [
-      { key: 'full_time_weekly_hours', label: 'Full-time week', help: 'Betri vinnutími: 36 h for shift workers.', unit: 'h', step: 0.5 },
-      { key: 'min_actual_weekly_hours', label: 'Weighting floor', help: 'Weighting may not bring a full-timer’s actual hours below this.', unit: 'h / week', step: 0.5, fallback: 32 },
-      { key: 'max_avg_weekly_hours', label: 'Average week, at most', help: 'Including overtime.', unit: 'h', fallback: 48 },
-      { key: 'max_overtime_hours', label: 'Overtime cap for the period', help: 'Hard cap on hours above contract.', unit: 'h', fallback: 20 },
+      { key: 'full_time_weekly_hours', label: 'Full-time week', help: 'Contract hours for 100% employment', unit: 'h / week', step: 0.5 },
+      { key: 'max_avg_weekly_hours', label: 'Average week, including overtime', help: 'Across the whole period', unit: 'h / week', step: 0.5, fallback: 48 },
+      { key: 'max_overtime_hours', label: 'Overtime cap', help: 'Hours above contract, per person, for the period', unit: 'h', fallback: 20 },
+      { key: 'min_actual_weekly_hours', label: 'Lowest actual week after weighting', help: 'Weighting may not bring a full-timer below this, pro rata', unit: 'h / week', step: 0.5, fallback: 32 },
     ],
   },
   {
     name: 'Rest',
     fields: [
-      { key: 'min_rest_hours', label: 'Daily rest', help: 'Shorter rest costs penalty points.', unit: 'h', step: 0.5 },
-      { key: 'min_rest_hours_absolute', label: 'Shortest rest at a shift change', help: 'Never shorter than this.', unit: 'h', step: 0.5 },
-      { key: 'max_short_rests_per_week', label: 'Short rests per week', help: 'Rests under the daily rest, per Mon–Sun week.', unit: '', fallback: 1 },
-      { key: 'weekly_rest_hours', label: 'Weekly rest', help: 'Continuous rest within every 7 days.', unit: 'h', fallback: 35 },
+      { key: 'min_rest_hours', label: 'Daily rest target', help: 'Shorter rest is allowed but costs points', unit: 'h', step: 0.5 },
+      { key: 'min_rest_hours_absolute', label: 'Daily rest minimum', help: 'Never shorter, even when changing shift type', unit: 'h', step: 0.5 },
+      { key: 'max_short_rests_per_week', label: 'Short rests per week', help: 'Rests under the target allowed per Mon–Sun week', unit: 'per week', fallback: 1 },
+      { key: 'weekly_rest_hours', label: 'Weekly rest', help: 'Continuous rest within every 7 days (statute)', unit: 'h', fallback: 35 },
     ],
   },
   {
-    name: 'Days, nights and shifts',
-    toggles: ['days_off_consecutive', 'days_off_hard'],
+    name: 'Shift length|group',
     fields: [
-      { key: 'days_off_per_week', label: 'Days off per week', help: 'Per Mon–Sun week.', unit: '', fallback: 2 },
-      { key: 'max_consecutive_days', label: 'Days in a row, at most', help: 'Weekly rest already caps this at 6.', unit: '', fallback: 6 },
-      { key: 'max_consecutive_nights', label: 'Nights in a row, at most', help: 'No agreement sets one.', unit: '', fallback: 5 },
-      { key: 'max_shift_hours', label: 'Longest shift', help: 'Never scheduled longer (13 h per 24 h).', unit: 'h', step: 0.5 },
-      { key: 'normal_max_shift_hours', label: 'Normal longest shift', help: 'Longer shift types are flagged.', unit: 'h', step: 0.5, fallback: 10 },
-      { key: 'min_shift_hours', label: 'Shortest shift', help: 'Shorter shift types are flagged.', unit: 'h', step: 0.5, fallback: 4 },
+      { key: 'max_shift_hours', label: 'Longest shift', help: 'Never scheduled longer (13 h in 24 h)', unit: 'h', step: 0.5 },
+      { key: 'normal_max_shift_hours', label: 'Normal longest shift', help: 'Longer shift types need a local agreement', unit: 'h', step: 0.5, fallback: 10 },
+      { key: 'min_shift_hours', label: 'Shortest shift', help: 'Shift types shorter than this are flagged', unit: 'h', step: 0.5, fallback: 4 },
     ],
   },
   {
-    name: 'Fairness and safety',
-    toggles: ['lone_night_warning'],
-    fields: [{ key: 'max_weekend_ratio', label: 'Share of weekends, at most', help: 'A fairness preference, not an agreement rule.', unit: '0–1', step: 0.05, fallback: 0.5 }],
+    name: 'Days off, nights and weekends',
+    toggles: ['days_off_consecutive', 'days_off_hard', 'lone_night_warning'],
+    fields: [
+      { key: 'days_off_per_week', label: 'Days off per Mon–Sun week', help: 'Soft: "as a rule", together', unit: 'days|unit', fallback: 2 },
+      { key: 'max_consecutive_days', label: 'Work days in a row', help: 'Optional local limit; weekly rest already caps it at 6', unit: 'days|unit', fallback: 6 },
+      { key: 'max_consecutive_nights', label: 'Night shifts in a row', help: 'No union limit; local practice', unit: 'nights', fallback: 5 },
+      { key: 'max_weekend_ratio', label: 'Weekends worked', help: 'Fairness target, not a union rule', unit: '% at most', fallback: 0.5 },
+    ],
   },
 ]
 
 const TOGGLE_LABEL = {
-  days_off_consecutive: 'Days off should be consecutive',
+  days_off_consecutive: 'Days off should be together',
   days_off_hard: 'Days off are a hard rule (Reykjavík)',
   lone_night_warning: 'Warn on lone night shifts (safety assessment)',
 }
 
 const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
-  { key: 'coverage_shortfall', label: 'Missing person on a shift' },
+  { key: 'coverage_shortfall', label: 'Someone missing from a shift' },
   { key: 'change_day', label: 'Repair: changed shift, ≤ 1 day notice' },
   { key: 'change_week', label: 'Repair: changed shift, 2–7 days notice' },
   { key: 'change', label: 'Repair: changed shift, > 1 week notice' },
   { key: 'request_denied', label: 'Working a requested day off' },
-  { key: 'short_rest_excess', label: 'Short rest beyond the weekly allowance' },
-  { key: 'days_off', label: 'Week without the expected days off' },
+  { key: 'short_rest_excess', label: 'Each short rest beyond the weekly allowance' },
+  { key: 'days_off', label: 'A week without days off together' },
   { key: 'holiday_fairness', label: 'Holiday load across periods' },
-  { key: 'short_rest', label: 'Rest below the daily rest' },
-  { key: 'weekend_excess', label: 'Each weekend above the share' },
+  { key: 'short_rest', label: 'Rest below target' },
+  { key: 'weekend_excess', label: 'Weekend above the share' },
   { key: 'overtime_hours', label: 'Each hour above contract' },
   { key: 'weekend_fairness', label: 'Weekend load across periods' },
-  { key: 'overtime_spread', label: 'Largest individual overtime' },
+  { key: 'overtime_spread', label: 'Each hour of the biggest overtime' },
   { key: 'under_hours', label: 'Each hour below contract' },
-  { key: 'overstaff', label: 'Each person above minimum' },
+  { key: 'overstaff', label: 'Each extra person above minimum' },
   { key: 'change_detail', label: 'Repair: hallway or task changed' },
 ]
 
 const AGREEMENT_FACTS: Record<Agreement, string[]> = {
-  sfv: ['Two days off a week are a goal, not a hard rule', 'Normal shifts up to 10 h', '8 major holidays; 1 May only for staff hired before 2000'],
-  state: ['Two days off a week are a goal, not a hard rule', 'Normal shifts up to 10 h', '8 major holidays'],
-  municipal: ['Two days off a week are a goal, not a hard rule', 'Normal shifts up to 12 h (SGS)', '9 major holidays, including 1 May', 'Lone night shifts need a safety assessment'],
-  reykjavik: ['Two consecutive days off every week are required', 'Normal shifts up to 10 h', '8 major holidays'],
-  custom: ['You have changed the defaults; pick an agreement to reset them'],
+  sfv: ['Days off "as a rule" together: soft, costs 20 points', 'Shifts over 10 h need a local agreement', 'No lone-night safety warning'],
+  state: ['Days off "as a rule" together: soft', 'Shifts over 10 h need a local agreement', 'No lone-night safety warning'],
+  municipal: ['Days off "as a rule" together: soft', 'Shifts up to 12 h are normal', 'Lone night shifts need a safety assessment'],
+  reykjavik: ['Two days off together every week: hard', 'Shifts over 10 h need a local agreement', 'No lone-night safety warning'],
+  custom: ['Your own settings below'],
 }
 
 const RULE_TYPES: { value: CustomRule['type']; label: string }[] = [
@@ -140,7 +141,8 @@ export function RulesView({ project: p, setProject }: Props) {
   const people = p.staff.map((s) => ({ value: s.id, label: s.name }))
   const areas = p.areas.map((a) => ({ value: a.id, label: a.name }))
   const maxWeight = Math.max(...WEIGHT_FIELDS.map((f) => p.weights[f.key]), 1)
-  const strength = (v: number) => (v >= 100 ? t('very strong') : v >= 40 ? t('strong') : v >= 10 ? t('medium') : t('light'))
+  const strength = (v: number) =>
+    `${v >= 100 ? t('Avoid at almost any cost') : v >= 30 ? t('Strongly avoid') : v >= 8 ? t('Avoid') : t('Mild preference')} · ${t('{n} pts', { n: v })}`
   const weights = [...WEIGHT_FIELDS].sort((a, b) => p.weights[b.key] - p.weights[a.key])
 
   return (
@@ -187,13 +189,24 @@ export function RulesView({ project: p, setProject }: Props) {
               <fieldset key={grp.name} className="limits">
                 <legend>{t(grp.name)}</legend>
                 {grp.fields.map((f) => {
-                  const value = p.rules[f.key] as number | null
+                  // Weekends are stored as a share (0–1) and shown as a percentage.
+                  const percent = f.key === 'max_weekend_ratio'
+                  const raw = p.rules[f.key] as number | null
+                  const value = percent && raw !== null ? Math.round(raw * 100) : raw
+                  const help = f.key === 'days_off_per_week' && p.rules.days_off_hard ? 'Hard: never fewer, and together' : f.help
                   return (
                     <div key={f.key} className="limit">
                       <span className="label">{t(f.label)}</span>
-                      <span className="help">{t(f.help)}</span>
+                      <span className="help">{t(help)}</span>
                       <span className="row">
-                        <NumberField step={f.step} width={92} nullable={f.fallback !== undefined} placeholder="—" value={value} onChange={(v) => setRules({ [f.key]: v } as Partial<LaborRules>)} />
+                        <NumberField
+                          step={percent ? 5 : f.step}
+                          width={92}
+                          nullable={f.fallback !== undefined}
+                          placeholder="—"
+                          value={value}
+                          onChange={(v) => setRules({ [f.key]: percent && v !== null ? v / 100 : v } as Partial<LaborRules>)}
+                        />
                         {f.unit && <span className="unit">{t(f.unit)}</span>}
                         {f.fallback !== undefined && (
                           <label className="row small" style={{ marginLeft: 'auto' }}>
@@ -242,16 +255,16 @@ export function RulesView({ project: p, setProject }: Props) {
                     return (
                       <tr key={idx}>
                         <td>
-                          <TextField value={b.name} onChange={(name) => patch({ name })} />
+                          <TextField width={260} value={b.name} onChange={(name) => patch({ name })} />
                         </td>
                         <td>
                           <Select
                             value={b.days}
                             options={[
                               { value: 'weekday', label: t('Weekdays') },
-                              { value: 'weekend_or_holiday', label: t('Weekends & holidays') },
-                              { value: 'high_holiday', label: t('165% hours (Christmas / New Year eves)') },
-                              { value: 'all', label: t('Every day') },
+                              { value: 'weekend_or_holiday', label: t('Weekends and holidays') },
+                              { value: 'high_holiday', label: t('Aðfangadagur, gamlársdagur from 16:00') },
+                              { value: 'all', label: t('Every day|band') },
                             ]}
                             onChange={(days) => patch({ days })}
                           />
@@ -288,7 +301,10 @@ export function RulesView({ project: p, setProject }: Props) {
               return (
                 <label key={f.key} className="weight-row">
                   <span>
-                    {t(f.label)} <span className="strength">· {strength(value)}</span>
+                    {t(f.label)}
+                    <span className="strength" style={{ display: 'block' }}>
+                      {strength(value)}
+                    </span>
                   </span>
                   <NumberField value={value} onChange={(v) => set({ weights: { ...p.weights, [f.key]: v ?? 0 } })} />
                   <span className="bar thick">

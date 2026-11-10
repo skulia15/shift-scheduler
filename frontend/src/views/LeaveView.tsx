@@ -4,6 +4,7 @@ import { NumberField, PageHead, RemoveButton, Section, TextField } from '../comp
 import { UndoIcon } from '../components/icons'
 import { periodDates, weekday } from '../dates'
 import { useI18n } from '../i18n'
+import { holidayNote } from '../holidayNotes'
 import { patchAt, removeAt } from '../lists'
 import type { ISODate, Leave, Project } from '../types'
 
@@ -13,8 +14,6 @@ interface Props {
 }
 
 type Kind = 'request' | 'granted' | 'holiday' | 'sick'
-const LETTER: Record<Kind, string> = { request: 'R', granted: 'G', holiday: 'F', sick: 'S' }
-const BY_LETTER: Record<string, Kind> = { r: 'request', g: 'granted', f: 'holiday', s: 'sick' }
 const CYCLE: (Kind | null)[] = [null, 'request', 'granted', 'holiday', 'sick']
 
 interface DayLeave {
@@ -63,6 +62,9 @@ export function LeaveView({ project: p, setProject }: Props) {
   const [undoStack, setUndoStack] = useState<Leave[][]>([])
   const inPeriod = p.leave.filter((lv) => lv.end >= dates[0] && lv.start <= dates[dates.length - 1]).sort((a, b) => a.start.localeCompare(b.start))
   const NAME: Record<Kind, string> = { request: t('Request'), granted: t('Granted'), holiday: t('Holiday leave'), sick: t('Sick') }
+  const KINDS: Kind[] = ['request', 'granted', 'holiday', 'sick']
+  const LETTER = Object.fromEntries(KINDS.map((k) => [k, i.leaveLetter(k)])) as Record<Kind, string>
+  const BY_LETTER = Object.fromEntries(KINDS.map((k) => [i.leaveLetter(k).toLowerCase(), k])) as Record<string, Kind>
 
   const commit = (next: Map<string, DayLeave>) => {
     setUndoStack((s) => [...s.slice(-49), p.leave])
@@ -137,13 +139,13 @@ export function LeaveView({ project: p, setProject }: Props) {
 
       <section className="card">
         <div className="row" style={{ gap: '8px 16px' }}>
-          <span className="chip request">R</span>
+          <span className="chip request">{LETTER.request}</span>
           <span>{t('Request: avoided if possible')}</span>
-          <span className="chip granted">G</span>
+          <span className="chip granted">{LETTER.granted}</span>
           <span>{t('Granted: never scheduled')}</span>
-          <span className="chip holiday">F</span>
+          <span className="chip holiday">{LETTER.holiday}</span>
           <span>{t('Holiday leave: never scheduled, lowers contract hours')}</span>
-          <span className="chip sick">S</span>
+          <span className="chip sick">{LETTER.sick}</span>
           <span>{t('Sick: never scheduled, lowers contract hours')}</span>
         </div>
         <div className="row">
@@ -151,12 +153,12 @@ export function LeaveView({ project: p, setProject }: Props) {
           <div className="segmented" role="radiogroup" aria-label={t('Shift-click fills with')}>
             {(['request', 'granted', 'holiday', 'sick', null] as (Kind | null)[]).map((k) => (
               <button key={k ?? 'clear'} role="radio" aria-checked={brush === k} onClick={() => setBrush(k)}>
-                {k ? `${LETTER[k]} ${NAME[k]}` : t('Clear')}
+                {k ? NAME[k] : t('Clear')}
               </button>
             ))}
           </div>
           <span className="spacer" />
-          <span className="muted small">{t('Select a day and type R, G, F, S or 0. Arrows move.')}</span>
+          <span className="muted small">{t('Select a day and type {letters} or 0. Arrows move.', { letters: KINDS.map((k) => LETTER[k]).join(', ') })}</span>
           <button className="btn" disabled={!undoStack.length} onClick={undo}>
             <UndoIcon />
             {t('Undo')}
@@ -263,6 +265,7 @@ export function LeaveView({ project: p, setProject }: Props) {
                   {h.major && <span className="chip hard">{t('Stórhátíð')}</span>}
                   <RemoveButton label={t('Remove holiday')} onClick={() => set({ public_holidays: removeAt(p.public_holidays, idx) })} />
                 </div>
+                <span className="muted small">{holidayNote(h, i, true)}</span>
                 <div className="row small">
                   <input type="date" aria-label={t('Date')} value={h.date} onChange={(e) => set({ public_holidays: patchAt(p.public_holidays, idx, { date: e.target.value }) })} />
                   <span className="muted">−</span>
