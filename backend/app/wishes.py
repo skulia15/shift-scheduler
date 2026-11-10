@@ -44,7 +44,12 @@ _WEAK = re.compile(r"\b(helst|yfirleitt|mest|oftast|ca|kannski|stundum|henta)\b"
 _STRONG = re.compile(r"\b(einungis|bara|aðeins|eingöngu|alltaf|engar|aldrei|ekki|kemst ekki)\b")
 _SPLIT = re.compile(r"[.;!()]|,(?!\s*(?:mv|kv|nv|eða|og|mán|þri|mið|fim|fös|lau|sun)\w*\b)", re.IGNORECASE)
 _SINGLE = re.compile(r"\b(\d{1,2})[:](\d{2})\b")
-_SKIP = re.compile(r"\bstundum\b|\btil í allar\b|\bí sumar\b|\bnema\b|hina vikuna|vikuna sem|eina viku|hverja viku|í mánuði")
+# Not expressible yet, or not a wish: sometimes, summer, exceptions, alternating weeks, monthly,
+# every other weekday ("annan hvern þriðjudag"), and what used to be ("var alltaf").
+_SKIP = re.compile(
+    r"\bstundum\b|\btil í allar\b|\bí sumar\b|\bnema\b|hina vikuna|vikuna sem|eina viku|hverja viku|í mánuði"
+    r"|\b(?:annan|aðra|annað)\s+hv\w*\s+(?:mán|þri|mið|fim|fös)|\bvar\b"
+)
 _TAIL = re.compile(r"\s+(?:svo|en)\s+.*$", re.IGNORECASE)
 
 

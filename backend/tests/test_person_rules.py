@@ -152,6 +152,8 @@ def wish(note):
         ("Alltaf á gula ganginum", [{"type": "fixed_area", "area_id": "yellow"}]),
         ("Stundum KV á mánudögum", []),
         ("Einn föstudag í mánuði", []),
+        ("var alltaf á fimmtudögum", []),
+        ("annan hvern mánudag KV", []),
     ],
 )
 def test_wish_notes_become_rule_suggestions(note, expected):
