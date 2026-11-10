@@ -419,9 +419,21 @@ class LedgerEntry(BaseModel):
     requests_denied: int = 0
 
 
+def same_day_next_month(day: date) -> date:
+    """15 Dec -> 15 Jan; a day past the next month's end becomes its last day."""
+    year, month = (day.year + 1, 1) if day.month == 12 else (day.year, day.month + 1)
+    for d in (day.day, 30, 29, 28):
+        try:
+            return date(year, month, d)
+        except ValueError:
+            continue
+    raise AssertionError("unreachable")
+
+
 class Period(BaseModel):
     start: date
     days: int = Field(28, ge=1, le=84)
+    monthly: bool = Field(False, description="Runs from the start's day of the month to the day before it next month (15th → 14th)")
 
     def dates(self) -> list[date]:
         return [self.start + timedelta(days=i) for i in range(self.days)]

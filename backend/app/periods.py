@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from .holidays import holidays_between
-from .models import Assignment, LedgerEntry, Period, Project
+from .models import Assignment, LedgerEntry, Period, Project, same_day_next_month
 from .validator import evaluate
 
 HISTORY_DAYS = 7
@@ -16,6 +16,10 @@ def next_period(project: Project, roster: list[Assignment]) -> Project:
     period's weekends, nights, holiday shifts and overtime are added to the ledger."""
     evaluation = evaluate(project, roster)
     start = project.period.start + timedelta(days=project.period.days)
+    days = project.period.days
+    if project.period.monthly:
+        start = same_day_next_month(project.period.start)
+        days = (same_day_next_month(start) - start).days
     prior = {e.staff_id: e for e in project.ledger}
     ledger = []
     for st in evaluation.staff:
@@ -34,10 +38,10 @@ def next_period(project: Project, roster: list[Assignment]) -> Project:
         )
     return project.model_copy(
         update={
-            "period": Period(start=start, days=project.period.days),
+            "period": Period(start=start, days=days, monthly=project.period.monthly),
             "history": [a for a in roster if start - timedelta(days=HISTORY_DAYS) <= a.date < start],
             "ledger": ledger,
             "leave": [lv for lv in project.leave if lv.end >= start],
-            "public_holidays": holidays_between(start, project.period.days, project.rules.agreement),
+            "public_holidays": holidays_between(start, days, project.rules.agreement),
         }
     )

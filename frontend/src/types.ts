@@ -214,7 +214,7 @@ export interface LedgerEntry {
 
 export interface Project {
   name: string
-  period: { start: ISODate; days: number }
+  period: { start: ISODate; days: number; monthly?: boolean }
   shift_types: ShiftType[]
   groups: StaffGroup[]
   staff: Staff[]

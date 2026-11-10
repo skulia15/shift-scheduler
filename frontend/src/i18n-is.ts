@@ -652,4 +652,5 @@ export const IS: Record<string, string> = {
   'Each person below a preferred headcount': 'Hver starfsmaður undir æskilegri mönnun',
   'Each person on an only-when-short shift': 'Hver starfsmaður á vakt sem aðeins er notuð ef vantar',
   '{n} preferred': '{n} æskilegt',
+  'Monthly: from day {day} to the day before it next month': 'Mánaðarlega: frá {day}. til dagsins á undan í næsta mánuði',
 }

@@ -75,3 +75,15 @@ def test_count_notes_read_preferred_and_linked_shifts():
     late = ShiftType(id="L", code="L", name="Late", start="17:00", end="23:00")
     assert linked_shift("lau - 1; sú á laugardegi fær 17:00-23:00 á sun", [DAY, late]) == (5, "L", 1)
     assert linked_shift("lau - 1", [DAY, late]) is None
+
+
+def test_monthly_period_runs_15th_to_14th_whatever_the_month_length():
+    from datetime import date
+
+    from app.models import Period
+    from app.periods import next_period
+
+    p = small_project(period=Period(start=date(2027, 1, 15), days=31, monthly=True))
+    nxt = next_period(p, [])
+    assert (nxt.period.start, nxt.period.days, nxt.period.monthly) == (date(2027, 2, 15), 28, True)
+    assert next_period(nxt, []).period.days == 31  # 15 Mar – 14 Apr

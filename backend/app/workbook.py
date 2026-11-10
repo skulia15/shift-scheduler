@@ -455,7 +455,8 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
             )
         )
 
-    period = Period(start=dates[0], days=len(dates))
+    monthly = (dates[-1] + timedelta(days=1)).day == dates[0].day and dates[-1].month != dates[0].month
+    period = Period(start=dates[0], days=len(dates), monthly=monthly)
     project = Project(
         name=sheet.title if sheet.title.casefold() not in ("sheet1", "blað1") else ("Deildin" if lang == "is" else "The unit"),
         period=period,

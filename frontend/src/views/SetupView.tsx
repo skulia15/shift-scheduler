@@ -16,6 +16,16 @@ interface Props {
   openPerson: (staffId: string) => void
 }
 
+/** Days from `start` to the same day next month (15 Jan → 15 Feb = 31). */
+function monthLength(start: string): number {
+  const d = new Date(`${start}T00:00:00Z`)
+  const next = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1))
+  const day = d.getUTCDate()
+  const lastOfNext = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 2, 0)).getUTCDate()
+  next.setUTCDate(Math.min(day, lastOfNext))
+  return Math.round((next.getTime() - d.getTime()) / 86_400_000)
+}
+
 export function SetupView({ project: p, setProject, roster, setRoster, openPerson }: Props) {
   const i = useI18n()
   const { t } = i
@@ -49,13 +59,25 @@ export function SetupView({ project: p, setProject, roster, setRoster, openPerso
             <div className="row" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
               <label className="field">
                 {t('Starts')}
-                <input type="date" value={p.period.start} onChange={(e) => e.target.value && set({ period: { ...p.period, start: e.target.value } })} />
+                <input
+                  type="date"
+                  value={p.period.start}
+                  onChange={(e) => e.target.value && set({ period: { ...p.period, start: e.target.value, days: p.period.monthly ? monthLength(e.target.value) : p.period.days } })}
+                />
               </label>
               <label className="field">
                 {t('Length in days')}
-                <NumberField value={p.period.days} onChange={(v) => set({ period: { ...p.period, days: Math.max(1, Math.min(84, v ?? 28)) } })} />
+                <NumberField value={p.period.days} onChange={(v) => set({ period: { ...p.period, monthly: false, days: Math.max(1, Math.min(84, v ?? 28)) } })} />
               </label>
             </div>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={!!p.period.monthly}
+                onChange={(e) => set({ period: { ...p.period, monthly: e.target.checked, days: e.target.checked ? monthLength(p.period.start) : p.period.days } })}
+              />
+              {t('Monthly: from day {day} to the day before it next month', { day: Number(p.period.start.slice(8)) })}
+            </label>
             <p className="help" style={{ margin: 0 }}>
               {t('Ends {date}. 1–84 days; whole weeks keep weekend fairness simple.', { date: `${i.day(end)} ${end.slice(0, 4)}` })}
             </p>
