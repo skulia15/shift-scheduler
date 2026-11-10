@@ -14,6 +14,7 @@ from .models import Agreement, Evaluation, Project, PublicHoliday, RepairRequest
 from .sample import sample_project
 from .solver import repair, solve
 from .spreadsheet import ImportResult, export_roster, import_roster
+from .workbook import WorkbookImport, import_workbook
 from .validator import evaluate
 
 app = FastAPI(title="Shift Scheduler")
@@ -49,6 +50,16 @@ async def post_import_roster(file: UploadFile = File(...), project: str = Form(.
     content = await file.read()
     try:
         return import_roster(Project.model_validate_json(project), file.filename or "", content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.post("/api/import/workbook")
+async def post_import_workbook(file: UploadFile = File(...), lang: Lang = "is") -> WorkbookImport:
+    """A whole unit from a planner's roster workbook: people, shift types, roster and staffing."""
+    content = await file.read()
+    try:
+        return await run_in_threadpool(import_workbook, content, lang)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 

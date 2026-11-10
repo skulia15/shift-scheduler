@@ -1,5 +1,5 @@
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -31,6 +31,7 @@ from app.models import (
 from app.sample import sample_project
 from app.solver import repair, solve
 from app.spreadsheet import export_roster, import_roster
+from app.workbook import import_workbook, mock_names, parse_staffing_note
 from app.validator import evaluate
 
 START = date(2026, 11, 30)  # a Monday
@@ -404,3 +405,85 @@ def test_regenerate_keeps_locked_shifts_and_may_change_the_rest():
     result = repair(project, roster, today=START + timedelta(days=30), mode="regenerate")
     assert (locked.staff_id, locked.date, locked.shift_id) in {(a.staff_id, a.date, a.shift_id) for a in result.roster}
     assert errors(result) == []
+
+
+def _planner_workbook() -> bytes:
+    """A synthetic workbook in the planners' layout: dates across (January typed with last year),
+    clock times in the cells coloured by kind, Hlutfall and óskir columns, count rows with notes."""
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill
+
+    blue, green, orange = (PatternFill("solid", fgColor=c) for c in ("FF94DCF8", "FFDAF2D0", "FFF1A983"))
+    days = [date(2026, 12, 29) + timedelta(days=i) for i in range(10)]
+    header = [datetime(d.year if d.month == 12 else 2026, d.month, d.day) for d in days]  # year bug in January
+    wb = Workbook()
+    ws = wb.active
+    ws.append(header + ["Hlutfall", "óskir"])
+    plan = [
+        (["08:00-16:00", "", "16:00-23:30", "", "08:00-13:00"] * 2, 0.8, "Önnur hvor helgi"),
+        (["", "16:00-23:30", "", "23:59-07:59", ""] * 2, 0.5, "Mest NV"),
+        (["08:00-16:00", "08:00-16:00", "", "", "16:00-23:30"] * 2, 1, ""),
+    ]
+    for cells, fraction, wish in plan:
+        ws.append(cells + [fraction, wish])
+        for c, v in enumerate(cells, start=1):
+            if v:
+                ws.cell(ws.max_row, c).fill = blue if v.startswith("08") else green if v.startswith("16") else orange
+    ws.append([])
+    count = lambda t: [sum(1 for cells, _, _ in plan if cells[i] == t) for i in range(10)]  # noqa: E731
+    ws.append(count("08:00-16:00") + ["", "", "alla daga - helst að hafa 2"])
+    ws.append(count("16:00-23:30") + ["", "", "mán-fim - 1; fös-sun - 2"])
+    ws.append(count("08:00-13:00") + ["", "", "virkir dagar - þarf ekki alltaf"])
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def test_workbook_becomes_a_project_with_people_shifts_and_roster():
+    res = import_workbook(_planner_workbook())
+    p = res.project
+    assert (p.period.start, p.period.days) == (date(2026, 12, 29), 10)
+    assert any("wrong year" in w for w in res.warnings)
+    assert [s.employment_percent for s in p.staff] == [80, 50, 100]
+    assert len({s.name for s in p.staff}) == 3 and not res.named
+    assert p.staff[1].note == "Mest NV"
+    kinds = {s.code: s.category for s in p.shift_types}
+    assert kinds == {"M": "morning", "M-13": "morning", "K": "evening", "N": "night"}
+    assert res.shifts_imported == 16
+
+
+def test_workbook_count_notes_become_staffing_rows():
+    res = import_workbook(_planner_workbook())
+    rows = {(c.shift_id, tuple(c.weekdays), c.min) for c in res.project.coverage}
+    assert ("K", (0, 1, 2, 3), 1) in rows
+    assert ("K", (4, 5, 6), 2) in rows
+    assert ("M-13", (0, 1, 2, 3, 4), 0) in rows
+    preferred = next(s for s in res.staffing if "helst" in s.note)
+    assert preferred.shift_id == "M" and not preferred.certain
+
+
+@pytest.mark.parametrize(
+    "note,expected",
+    [
+        ("alla daga - 1 á þessari vakt", [(list(range(7)), 1, None)]),
+        ("sun-fim - 1 á þessari vakt", [([6, 0, 1, 2, 3], 1, None)]),
+        ("fös  lau - 1 á þessari vakt", [([4, 5], 1, None)]),
+        ("alla daga - 1, nema á fös og lau - 0", [([0, 1, 2, 3, 6], 1, None)]),
+        ("aðeins um helgar", [([5, 6], 1, None)]),
+        ("mán-fim - 1 á þessari vakt; fös-sun - 2 á þessari vakt", [([0, 1, 2, 3], 1, None), ([4, 5, 6], 2, None)]),
+        # Clock times in a note are not headcounts.
+        ("fös  lau - 1 á þessari vakt; sú sem er á þessari vakt á laugardegi fær 17:00-23:00 á sun", [([4, 5], 1, None)]),
+        ("alla virka daga - passa að hafa 7:30 á vakt", [([0, 1, 2, 3, 4], 1, None)]),
+    ],
+)
+def test_staffing_notes_parse(note, expected):
+    rules, _, _ = parse_staffing_note(note, observed_min=0, observed_median=1)
+    assert rules == expected
+
+
+def test_mock_names_are_unique_and_skip_names_in_the_notes():
+    names = mock_names(60, avoid={"anna"})
+    assert len(set(names)) == 60
+    assert not any(n.startswith("Anna ") for n in names)

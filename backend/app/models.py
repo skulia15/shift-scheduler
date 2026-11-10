@@ -29,6 +29,19 @@ class ShiftType(BaseModel):
     end: str = Field(pattern=r"^\d{2}:\d{2}$", description="May be earlier than start: crosses midnight")
     break_minutes: int = 0
     is_night: bool = False
+    category: Literal["morning", "evening", "night"] | None = Field(
+        None, description="MV / KV / NV; None = from the start time (night if is_night)"
+    )
+
+    @property
+    def kind(self) -> str:
+        """Morning, evening or night: the category if set, else from the start time."""
+        if self.category:
+            return self.category
+        if self.is_night:
+            return "night"
+        start = self.start_minute
+        return "morning" if start < 12 * 60 else "evening" if start < 20 * 60 + 30 else "night"
 
     @property
     def start_minute(self) -> int:
@@ -59,6 +72,7 @@ class Staff(BaseModel):
     target_hours_override: float | None = Field(None, description="Hours for the whole period")
     competence_ids: list[str] = Field(default_factory=list, description="e.g. medication rights, Icelandic")
     employee_number: str | None = Field(None, description="Starfsmannanúmer, for matching to MTP / payroll files")
+    note: str = Field("", description="The person's wishes, as written (e.g. imported from the planner's sheet)")
 
 
 class Competence(BaseModel):
@@ -96,6 +110,7 @@ class CoverageDemand(BaseModel):
     dates: list[date] | None = None
     min: int = 0
     max: int | None = None
+    note: str = Field("", description="Where the row came from, e.g. the planner's note it was read from")
 
 
 class TaskDemand(BaseModel):
