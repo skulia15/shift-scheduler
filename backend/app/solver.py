@@ -630,9 +630,17 @@ class _Model:
 def _run(ctx: Context, relax: bool, seconds: float, repair: Repair | None = None) -> tuple[int, _Model, cp_model.CpSolver]:
     model = _Model(ctx, relax_coverage=relax, repair=repair)
     model.build()
+    if repair:
+        # Start the search from the current roster (the planner's own, when imported): the solver
+        # improves on it instead of building a month from nothing.
+        for (s, d, t), var in model.work.items():
+            base = repair.base.get((s, d))
+            model.m.add_hint(var, int(base is not None and base.shift_id == ctx.shifts[t].id))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = seconds
     solver.parameters.num_workers = 8
+    solver.parameters.random_seed = 1
+    solver.parameters.repair_hint = True
     status = solver.solve(model.m)
     return status, model, solver
 
