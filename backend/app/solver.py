@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -656,7 +657,8 @@ def _run(ctx: Context, relax: bool, seconds: float, repair: Repair | None = None
             model.m.add_hint(var, int(base is not None and base.shift_id == ctx.shifts[t].id))
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = seconds
-    solver.parameters.num_workers = 8
+    # Every core: on a 74-person month the result is much better with more workers.
+    solver.parameters.num_workers = max(8, min(16, os.cpu_count() or 8))
     solver.parameters.random_seed = 1
     solver.parameters.repair_hint = True
     status = solver.solve(model.m)

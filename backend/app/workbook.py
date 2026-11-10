@@ -540,7 +540,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         coverage=coverage,
         custom_rules=links,
         public_holidays=holidays_between(period.start, period.days),
-        solve_seconds=30,
+        solve_seconds=60,  # a 74-person month needs about a minute for a good roster
     )
     if leave:
         black = sum(1 for lv in leave if lv.kind == "request")
