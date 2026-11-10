@@ -228,6 +228,8 @@ export function RosterView(props: Props) {
   // ------------------------------------------------------------ derived status
   const errors = violations.filter((v) => v.severity === 'error')
   const hasWishes = (evaluation?.wishes?.length ?? 0) > 0
+  // Only units where someone has written wishes get the column.
+  const anyNotes = project.staff.some((s) => s.note.trim())
   const warnings = violations.filter((v) => v.severity === 'warning')
   const lockedCount = roster.filter((a) => a.locked).length
   const lockedConflicts = errors.filter((v) => v.staff_id && v.date && cell.get(`${v.staff_id}|${v.date}`)?.locked && !v.rule.includes('coverage'))
@@ -592,12 +594,8 @@ export function RosterView(props: Props) {
                     {t('Wknd')}
                     <span className="sub">{t('of {n}', { n: weekendCount })}</span>
                   </th>
-                  {view.columns && (
-                    <>
-                      <th className="stat">{t('Nights')}</th>
-                      <th className="stat wishes-col">{t('Wishes')}</th>
-                    </>
-                  )}
+                  {view.columns && <th className="stat">{t('Nights')}</th>}
+                  {view.columns && anyNotes && <th className="stat wishes-col">{t('Wishes')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -694,15 +692,13 @@ export function RosterView(props: Props) {
                               {st && Math.abs(diff) >= 8 && <span className="note">{t(diff > 0 ? '{h} h over' : '{h} h under', { h: Math.round(Math.abs(diff)) })}</span>}
                             </td>
                             <td className={`stat ${st && st.weekends_worked > Math.ceil(weekendCount / 2) ? 'warn' : ''}`}>{st?.weekends_worked ?? ''}</td>
-                            {view.columns && (
-                              <>
-                                <td className="stat">{st?.night_shifts || ''}</td>
-                                <td className="stat wishes-col" title={s.note}>
-                                  <button type="button" className="name-btn" onClick={() => props.openPerson(s.id)}>
-                                    {s.note}
-                                  </button>
-                                </td>
-                              </>
+                            {view.columns && <td className="stat">{st?.night_shifts || ''}</td>}
+                            {view.columns && anyNotes && (
+                              <td className="stat wishes-col" title={s.note}>
+                                <button type="button" className="name-btn" onClick={() => props.openPerson(s.id)}>
+                                  {s.note}
+                                </button>
+                              </td>
                             )}
                           </tr>
                         )
@@ -1122,6 +1118,11 @@ function WishesPanel({ project, wishes, hasRoster, openPerson }: { project: Proj
             ))}
           </ul>
           {!all && people.length > 12 && <p className="muted small" style={{ margin: 0 }}>{t('and {n} more', { n: people.length - 12 })}</p>}
+          {!all && people.length === 0 && (
+            <p className="muted small" style={{ margin: 0 }}>
+              {project.staff.some((s) => s.note.trim()) ? t('Every wish is met. Tick Show met to see them.') : t('Only day-off requests so far, all met. Write wishes on each person (click a name).')}
+            </p>
+          )}
         </>
       )}
     </section>

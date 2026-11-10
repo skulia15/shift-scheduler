@@ -26,9 +26,11 @@ from .models import (
     Task,
     TaskDemand,
 )
+from .wishes import suggest_rules
 
 WEEKDAYS = [0, 1, 2, 3, 4]
 DAY_SHIFTS = ["M", "K"]
+
 
 
 def sample_project(lang: str = "en") -> Project:
@@ -77,7 +79,20 @@ def sample_project(lang: str = "en") -> Project:
         for i, (name, pct, allowed) in enumerate(floor, 1)
     ]
 
-    return Project(
+    # Wishes as staff write them on the planner's sheet; the suggested rules are added below.
+    wishes = {
+        "n2": "Önnur hver helgi",
+        "n6": "Ekki vakt á mánudögum",
+        "f3": "Engar helgar",
+        "f4": "Önnur hver helgi, ein kvöldvakt í viku",
+        "f8": "Alla miðvikudaga KV",
+        "f12": "Ekki vakt á fim og fös",
+        "f13": "Mest NV",
+    }
+    for person in staff:
+        person.note = wishes.get(person.id, "")
+
+    project = Project(
         name="Hjúkrunarheimili — 2. hæð",
         period=Period(start=date(2026, 11, 30), days=28),
         shift_types=[
@@ -188,6 +203,8 @@ def sample_project(lang: str = "en") -> Project:
         ],
         solve_seconds=20,
     )
+    project.custom_rules += [s.rule for s in suggest_rules(project)]
+    return project
 
 
 def _rules(icelandic: bool) -> LaborRules:

@@ -669,4 +669,6 @@ export const IS: Record<string, string> = {
   'Colours as in the Excel sheet': 'Litir eins og í Excel-skýrslunni',
   'Compact: a month and more people on one screen': 'Þétt: mánuður og fleiri starfsmenn á einum skjá',
   'Night shifts and wishes next to the hours': 'Næturvaktir og óskir við hliðina á tímum',
+  'Every wish is met. Tick Show met to see them.': 'Allar óskir eru uppfylltar. Hakaðu í Sýna uppfylltar til að sjá þær.',
+  'Only day-off requests so far, all met. Write wishes on each person (click a name).': 'Aðeins óskir um frí enn sem komið er, allar uppfylltar. Skráðu óskir á hvern starfsmann (smelltu á nafn).',
 }
