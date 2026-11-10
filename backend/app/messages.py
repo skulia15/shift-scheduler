@@ -51,6 +51,7 @@ IS = {
     "{label}: {name} {a} → {b}": "{label}: {name} {a} → {b}",
     "{group}: {n}, {pref} preferred": "{group}: {n}, æskilegt {pref}",
     "{label}: {name} works {a} but not {b} after it": "{label}: {name} er á {a} en ekki á {b} á eftir",
+    "Day-off requests": "Óskir um frí",
     "morning": "MV",
     "evening": "KV",
     "night": "NV",

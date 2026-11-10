@@ -87,3 +87,21 @@ def test_monthly_period_runs_15th_to_14th_whatever_the_month_length():
     nxt = next_period(p, [])
     assert (nxt.period.start, nxt.period.days, nxt.period.monthly) == (date(2027, 2, 15), 28, True)
     assert next_period(nxt, []).period.days == 31  # 15 Mar – 14 Apr
+
+
+def test_export_starts_with_the_planners_layout_and_reads_back():
+    import io
+
+    from openpyxl import load_workbook
+
+    from app.spreadsheet import export_roster
+    from app.workbook import import_workbook
+
+    p = small_project()
+    roster = solve(p).roster
+    data = export_roster(p, roster)
+    ws = load_workbook(io.BytesIO(data)).worksheets[0]
+    assert ws.title == "Vaktaskýrsla" and ws["A3"].value == "S0"
+    assert any(str(c.value).startswith("=COUNTIF(") for row in ws.iter_rows() for c in row)
+    back = import_workbook(data)
+    assert back.people == 6 and back.shifts_imported == len(roster)

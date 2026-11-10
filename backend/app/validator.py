@@ -27,6 +27,7 @@ from .models import (
     StaffStats,
     UnavailableWeekdaysRule,
     Violation,
+    WishResult,
     WeekendPatternRule,
     WorkTogetherRule,
 )
@@ -308,7 +309,35 @@ def evaluate(project: Project, roster: list[Assignment], lang: str = "en") -> Ev
         )
 
     _custom_rules(ctx, work, area_of, v, M, task_name, area_name, shift_name)
-    return Evaluation(violations=out, staff=stats, coverage=cells)
+    return Evaluation(violations=out, staff=stats, coverage=cells, wishes=wish_results(ctx, out, M))
+
+
+def wish_results(ctx: Context, violations: list[Violation], M) -> list[WishResult]:
+    """Per person: each of their rules with how often the roster misses it, and their day-off requests."""
+    by_rule: dict[tuple[str, str | None], list[Violation]] = defaultdict(list)
+    for v in violations:
+        by_rule[v.rule, v.staff_id].append(v)
+    out: list[WishResult] = []
+    for person in ctx.staff:
+        for rule in ctx.project.custom_rules:
+            if not rule.enabled or getattr(rule, "staff_id", None) != person.id:
+                continue
+            hits = by_rule.get((rule.id, person.id), [])
+            out.append(
+                WishResult(
+                    staff_id=person.id,
+                    rule_id=rule.id,
+                    description=rule.description or rule.type,
+                    hard=rule.hard,
+                    misses=len(hits),
+                    examples=[h.message for h in hits[:3]],
+                )
+            )
+        asked = sum(1 for lv in ctx.project.leave if lv.staff_id == person.id and lv.kind == "request" and not lv.granted for _ in lv.days())
+        if asked:
+            hits = by_rule.get(("request_denied", person.id), [])
+            out.append(WishResult(staff_id=person.id, rule_id="requests", description=M("Day-off requests"), misses=len(hits), total=asked, examples=[h.message for h in hits[:3]]))
+    return out
 
 
 def _custom_rules(

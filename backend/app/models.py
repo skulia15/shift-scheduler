@@ -557,10 +557,23 @@ class CoverageCell(BaseModel):
     preferred: int | None = None
 
 
+class WishResult(BaseModel):
+    """Whether one person's wish (a person rule, or their day-off requests) is met in the roster."""
+
+    staff_id: str
+    rule_id: str = Field(description="The rule's id, or 'requests' for day-off requests")
+    description: str
+    hard: bool = False
+    misses: int = 0
+    total: int | None = Field(None, description="Requests only: how many days were asked for")
+    examples: list[str] = Field(default_factory=list, description="Up to three messages about the misses")
+
+
 class Evaluation(BaseModel):
     violations: list[Violation]
     staff: list[StaffStats]
     coverage: list[CoverageCell]
+    wishes: list[WishResult] = []
 
 
 class ValidateRequest(BaseModel):

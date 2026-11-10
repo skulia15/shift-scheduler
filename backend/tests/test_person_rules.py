@@ -168,3 +168,15 @@ def test_suggested_rules_solve_and_are_soft():
     project.custom_rules = [s.rule for s in found]
     assert not errors(solve(project))
     assert suggest_rules(project) == []  # already accepted
+
+
+def test_evaluation_reports_each_wish_with_its_misses():
+    from app.models import Leave
+
+    rules = [UnavailableWeekdaysRule(id="u", staff_id="s0", weekdays=[0], description="Not Mondays")]
+    leave = [Leave(staff_id="s0", start=START + timedelta(days=2), end=START + timedelta(days=3), kind="request")]
+    roster = _on("s0", {0: "D", 7: "D", 2: "E"})
+    wishes = evaluate(small_project(custom_rules=rules, leave=leave), roster).wishes
+    by = {w.rule_id: w for w in wishes}
+    assert (by["u"].description, by["u"].misses) == ("Not Mondays", 2)
+    assert (by["requests"].misses, by["requests"].total) == (1, 2)
