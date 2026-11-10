@@ -43,7 +43,7 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
 
   const options = useMemo(
     () => [
-      { id: null as string | null, code: t('Off'), name: t('Off'), time: '', color: { bg: '#e6ebe9', fg: '#2d3538' }, allowed: true, kind: null as ShiftKind | null },
+      { id: null as string | null, code: '–', name: t('Not on shift'), time: '', color: { bg: '#e6ebe9', fg: '#2d3538' }, allowed: true, kind: null as ShiftKind | null },
       ...[...project.shift_types]
         .sort((x, y) => KINDS.indexOf(shiftKind(x)) - KINDS.indexOf(shiftKind(y)) || x.start.localeCompare(y.start))
         .map((s) => ({
@@ -121,7 +121,7 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
     return (
       <div key={d}>
         <span className="day">{i.day(d)}</span>
-        <span className="what">{s ? `${s.code} · ${s.name}` : t('Off')}</span>
+        <span className="what">{s ? `${s.code} · ${s.name}` : t('Not on shift')}</span>
         {crosses && <span className="note">{t('ends {day} {time}', { day: i.weekday(addDays(d, 1)), time: s!.end })}</span>}
       </div>
     )
@@ -147,7 +147,7 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
           {neighbour(addDays(date, -1))}
           <div className="current">
             <span className="day">{i.day(date)}</span>
-            <span className="what">{chosen?.id ? `${chosen.code} · ${chosen.name}` : t('Off')}</span>
+            <span className="what">{chosen?.id ? `${chosen.code} · ${chosen.name}` : t('Not on shift')}</span>
           </div>
           {neighbour(addDays(date, 1))}
         </div>

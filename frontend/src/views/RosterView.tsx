@@ -631,7 +631,7 @@ export function RosterView(props: Props) {
                                     tabIndex={focusable ? 0 : -1}
                                     className={`cell ${!a && leave ? `leave-${leave}` : ''} ${selected ? 'selected' : ''}`}
                                     style={color ? { background: color.bg, color: color.fg } : undefined}
-                                    aria-label={`${s.name}, ${i.day(d)}: ${a ? (shiftById.get(a.shift_id)?.name ?? a.shift_id) : t('off')}${a?.locked ? `, ${t('locked edit')}` : ''}${vs.map((v) => `. ${v.message}`).join('')}`}
+                                    aria-label={`${s.name}, ${i.day(d)}: ${a ? (shiftById.get(a.shift_id)?.name ?? a.shift_id) : t('not on shift')}${a?.locked ? `, ${t('locked edit')}` : ''}${vs.map((v) => `. ${v.message}`).join('')}`}
                                     onClick={(e) => onCellClick(e, s.id, d)}
                                     onDoubleClick={() => setEditing({ staffId: s.id, date: d })}
                                     onKeyDown={(e) => onCellKey(e, s.id, d)}
@@ -875,7 +875,7 @@ function SelectionPanel({
       return (
         <div key={d} className={current ? 'current' : ''}>
           <span className="day">{i.day(d)}</span>
-          <span className="what">{sh ? `${sh.code} · ${sh.name}` : lv === 'holiday' ? t('Holiday leave') : lv === 'sick' ? t('Sick') : t('Off')}</span>
+          <span className="what">{sh ? `${sh.code} · ${sh.name}` : lv === 'holiday' ? t('Holiday leave') : lv === 'sick' ? t('Sick') : t('Not on shift')}</span>
           {crosses && <span className="note">{t('ends {day} {time}', { day: i.weekday(addDays(d, 1)), time: sh!.end })}</span>}
         </div>
       )
@@ -909,8 +909,8 @@ function SelectionPanel({
             {t('Edit shift, area & task')}
           </button>
           {a && (
-            <button className="btn" onClick={() => onSet(sel.staffId, sel.date, null)}>
-              {t('Set to off')}
+            <button className="btn" title={t('Leaves the day empty. Holiday leave and day-off requests are entered under Leave.')} onClick={() => onSet(sel.staffId, sel.date, null)}>
+              {t('Remove from shift')}
             </button>
           )}
           {a?.locked && (
@@ -1229,7 +1229,7 @@ function ChangesCard({ project, changes }: { project: Project; changes: Change[]
   const i = useI18n()
   const { t } = i
   const staffName = new Map(project.staff.map((s) => [s.id, s.name]))
-  const code = (id: string | null) => (id ? (project.shift_types.find((s) => s.id === id)?.code ?? id) : t('Off'))
+  const code = (id: string | null) => (id ? (project.shift_types.find((s) => s.id === id)?.code ?? id) : t('Not on shift'))
   const withFee = changes.filter((c) => c.fee_percent > 0)
   return (
     <section className="card no-print">

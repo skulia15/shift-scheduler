@@ -658,4 +658,9 @@ export const IS: Record<string, string> = {
   'Generate a roster to see which wishes it meets.': 'Búðu til vaktaplan til að sjá hvaða óskir það uppfyllir.',
   '{met} of {n} met': '{met} af {n} uppfylltar',
   'Day-off requests': 'Óskir um frí',
+  // A day with no shift is not leave: say so plainly
+  'Not on shift': 'Ekki á vakt',
+  'not on shift': 'ekki á vakt',
+  'Remove from shift': 'Taka af vakt',
+  'Leaves the day empty. Holiday leave and day-off requests are entered under Leave.': 'Dagurinn verður auður. Orlof og óskir um frí eru skráð undir Leyfi.',
 }
