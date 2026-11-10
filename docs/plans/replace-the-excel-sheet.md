@@ -59,6 +59,13 @@ Each phase ends with something the planner can use.
 - **Wish suggestions**: read the free-text wish and propose the structured rules for the planner
   to accept (pattern rules first; optionally an LLM for the long tail).
 
+Done: weekend pattern, allowed shifts (kind / clock time / weekdays), recurring weekday shift,
+unavailable weekdays, shifts per week, mixed shifts by kind, work together; the person panel; and
+suggestions from the wish text (all soft). On the real sheet about 100 rules are read from 46
+wishes; a generated roster misses about half as many of them as the sheet's own roster does.
+Not yet: alternating patterns ("Mondays on weekend weeks, Thursdays the other week"), weekly
+MV → KV → NV rotation, "one Friday a month", and pairs named in the text (names are mock).
+
 ### Phase 3 — Staffing needs that match practice
 - Preferred (soft) headcount above the hard minimum ("helst að hafa 6").
 - "Fallback" shifts that are only used when short ("þarf ekki alltaf").
