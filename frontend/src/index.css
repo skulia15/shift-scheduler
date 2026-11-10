@@ -1,4 +1,4 @@
-/* Vaktaplan — the day ribbon: morning, evening, night (design: claude.ai artifact "Shift Scheduler Redesign"). */
+/* Vaktaplan — the day ribbon: morning, evening, night. Type: IBM Plex Sans throughout. */
 :root {
   --bg: #f3f5f4;
   --surface: #ffffff;
@@ -38,7 +38,7 @@
   --night-ink: #e8f0fa;
   --night-ribbon: #4b77ad;
   --radius: 12px;
-  font-family: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', Arial, sans-serif;
+  font-family: 'IBM Plex Sans', Arial, sans-serif;
   font-size: 14px;
   color: var(--ink);
   background: var(--bg);
@@ -50,7 +50,7 @@ button, select, input, textarea { font: inherit; color: inherit; }
 a { color: var(--teal); text-underline-offset: 3px; }
 a:hover { color: var(--teal-dark); }
 ::selection { background: var(--teal-tint); color: var(--ink); }
-h1, h2, .serif { font-family: Alegreya, Georgia, serif; font-weight: 700; letter-spacing: 0; }
+h1, h2 { font-weight: 600; letter-spacing: -0.01em; }
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
@@ -101,7 +101,7 @@ input.code { width: 52px; font-weight: 700; text-align: center; }
 .topbar-inner { max-width: 1480px; margin: 0 auto; padding: 12px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .brand-mark { width: 32px; height: 32px; border-radius: 8px; background: var(--slate-2); display: flex; align-items: center; justify-content: center; flex: none; }
-.brand-name { font-family: Alegreya, Georgia, serif; font-weight: 700; font-size: 21px; }
+.brand-name { font-weight: 700; font-size: 19px; letter-spacing: -0.01em; }
 .unit-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .unit-name input { font-weight: 600 !important; font-size: 16px; color: var(--on-slate) !important; background: transparent !important; border: 1px solid transparent !important; border-radius: 8px; padding: 6px 8px !important; width: 260px; max-width: 60vw; }
 .unit-name input:hover, .unit-name input:focus { border-color: rgb(238 243 241 / 0.4) !important; }
@@ -134,7 +134,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; colo
 .card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .card-head > div:first-child { flex: 1 1 260px; min-width: 0; }
 .card h2 { margin: 0; font-size: 18px; font-weight: 600; color: var(--slate); }
-.card h2 .count { color: var(--ink-3); font-weight: 400; font-family: 'Atkinson Hyperlegible Next', Arial, sans-serif; font-size: 15px; }
+.card h2 .count { color: var(--ink-3); font-weight: 400; font-size: 15px; }
 .hint { margin: 4px 0 0; color: var(--ink-3); }
 .cols { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
 .col { flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -328,7 +328,7 @@ fieldset.limits legend { padding: 0 6px; font-weight: 700; color: var(--slate); 
 .modal { width: min(580px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: #fff; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 24px 60px rgb(20 26 28 / 0.3); }
 .modal-head { display: flex; align-items: flex-start; gap: 12px; }
 .modal-head > div { flex: 1 1 0; min-width: 0; }
-.modal h2 { margin: 0; font-size: 22px; font-weight: 600; color: var(--slate); font-family: 'Atkinson Hyperlegible Next', Arial, sans-serif; }
+.modal h2 { margin: 0; font-size: 22px; font-weight: 600; color: var(--slate); }
 .modal fieldset { border: 0; margin: 0; padding: 0; }
 .modal legend { padding: 0; margin-bottom: 8px; font-weight: 600; color: var(--ink-2); }
 .modal legend .muted { font-weight: 400; }
