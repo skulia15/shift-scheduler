@@ -235,8 +235,8 @@ table.roster { border-collapse: separate; border-spacing: 0; font-size: 12px; wi
 .roster thead th.stat .sub { display: block; font-weight: 400; font-size: 11px; }
 .roster td.stat .note { display: block; font-size: 11px; }
 .roster td.stat.warn { color: var(--warn); font-weight: 700; }
-.roster tr.coverage-head th { position: sticky; left: 0; background: #fff; padding: 14px 14px 6px; font-weight: 700; color: var(--ink-2); text-align: left; white-space: nowrap; border-top: 1px solid var(--line); }
-.roster tr.coverage-head th .muted { font-weight: 400; margin-left: 6px; }
+.roster tr.coverage-head th { position: sticky; left: 0; background: #fff; padding: 14px 14px 6px; font-weight: 700; color: var(--ink-2); text-align: left; white-space: normal; max-width: 200px; border-top: 1px solid var(--line); }
+.roster tr.coverage-head th .muted { display: block; font-weight: 400; font-size: 12px; }
 .roster tr.coverage-head td { border-top: 1px solid var(--line); padding: 8px; }
 .roster tr.coverage th.name { font-weight: 500; color: var(--ink-2); }
 .roster tr.coverage th.name .label { display: inline-flex; align-items: center; gap: 6px; }
@@ -401,3 +401,25 @@ button.link { font-weight: 600; min-width: 160px; }
 .wishes-report button.link { min-width: 0; }
 .chip.missed { background: var(--warn-bg); color: var(--warn-ink); }
 .chip.met { background: var(--bg); color: var(--ink-3); }
+
+/* View options: clock times, the planner's sheet colours, compact. */
+.view-panel { grid-template-columns: 1fr; width: 360px; }
+.roster.times .cell { width: 44px; font-size: 10px; font-weight: 600; gap: 1px; }
+.roster.times .cell .time { display: block; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.roster.sheet thead th.weekend, .roster.sheet td.weekend, .roster.sheet thead th.holiday, .roster.sheet td.holiday { background: #ffffcc; }
+.roster.sheet thead th.major, .roster.sheet td.major { background: #fce4d6; }
+.roster.sheet .cell.leave-holiday { background: #a6a6a6; color: #fff; }
+.roster.sheet .cell.leave-sick { background: #000; color: #fff; }
+.roster.compact thead th { padding: 2px 0; min-width: 0; font-size: 11px; }
+.roster.compact thead th .num { height: 16px; font-size: 11px; }
+.roster.compact th.name { min-width: 150px; padding: 0 8px; font-size: 12px; }
+.roster.compact td.slot { padding: 1px 1px; }
+.roster.compact .cell { width: 30px; height: 22px; border-radius: 4px; font-size: 10px; }
+.roster.compact.times .cell { width: 38px; height: 24px; font-size: 9px; gap: 0; }
+.roster.compact tr.group-row th { padding: 6px 8px 2px; }
+.roster.compact td.stat { padding: 1px 6px; font-size: 11px; }
+.roster-layout.compact { flex-direction: column; align-items: stretch; }
+.roster-layout.compact .roster-side { position: static; flex-basis: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+.roster-layout.compact .grid-box { max-height: calc(100vh - 230px); }
+.roster .wishes-col { max-width: 220px; text-align: left; }
+.roster td.wishes-col .name-btn { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; font-size: 12px; color: var(--ink-2); }

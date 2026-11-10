@@ -9,7 +9,7 @@ import { describeRule } from '../rules'
 import { holidayNote } from '../holidayNotes'
 import { KINDS, shiftColor, shiftKind } from '../shiftColors'
 import { download } from '../store'
-import type { Assignment, Change, CoverageCell, Evaluation, ISODate, ImportResult, LedgerEntry, Project, SolveResult, Violation, WishResult, WorkbookImport } from '../types'
+import type { Assignment, Change, CoverageCell, Evaluation, ISODate, ImportResult, LedgerEntry, Project, SolveResult, ViewPrefs, Violation, WishResult, WorkbookImport } from '../types'
 import { ShiftDialog } from './ShiftDialog'
 
 interface Props {
@@ -30,6 +30,8 @@ interface Props {
   onNextPeriod: () => void
   onReplaceUnit: (project: Project, roster: Assignment[]) => void
   openPerson: (staffId: string) => void
+  view: ViewPrefs
+  setView: (v: ViewPrefs) => void
 }
 
 type Selection = { kind: 'person'; staffId: string; date: ISODate } | { kind: 'cov'; row: string; date: ISODate } | null
@@ -48,7 +50,7 @@ const addDays = (d: ISODate, n: number) => new Date(Date.parse(d) + n * MS_DAY).
 const clock = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5))
 
 export function RosterView(props: Props) {
-  const { project, roster, setRoster, evaluation, solveInfo, busy, run, undo, undoCount, changes, asOf, setAsOf, setProject } = props
+  const { project, roster, setRoster, evaluation, solveInfo, busy, run, undo, undoCount, changes, asOf, setAsOf, setProject, view, setView } = props
   const i = useI18n()
   const { t } = i
   const dates = useMemo(() => periodDates(project.period.start, project.period.days), [project.period])
@@ -421,7 +423,7 @@ export function RosterView(props: Props) {
       )}
       {importReport && <ImportReportCard report={importReport} onClose={() => setImportReport(null)} />}
 
-      <div className="roster-layout">
+      <div className={`roster-layout ${view.compact ? 'compact' : ''}`}>
         <section className="roster-main" aria-label={t('Roster grid')}>
           <div className="roster-toolbar no-print">
             {KINDS.map((kind) => {
@@ -444,6 +446,24 @@ export function RosterView(props: Props) {
                 </span>
               )
             })}
+            <details className="key">
+              <summary>{t('View')}</summary>
+              <div className="key-panel view-panel">
+                {(
+                  [
+                    ['times', t('Clock times in the cells (instead of codes)')],
+                    ['sheet', t('Colours as in the Excel sheet')],
+                    ['compact', t('Compact: a month and more people on one screen')],
+                    ['columns', t('Night shifts and wishes next to the hours')],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="row">
+                    <input type="checkbox" checked={view[key]} onChange={(e) => setView({ ...view, [key]: e.target.checked })} />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </details>
             <details className="key">
               <summary>{t('Key to marks')}</summary>
               <div className="key-panel">
@@ -545,7 +565,7 @@ export function RosterView(props: Props) {
           </div>
 
           <div className="grid-box" ref={gridRef}>
-            <table className="roster" role="grid" aria-label={t('Roster')} aria-describedby="grid-help">
+            <table className={`roster ${view.times ? 'times' : ''} ${view.sheet ? 'sheet' : ''} ${view.compact ? 'compact' : ''}`} role="grid" aria-label={t('Roster')} aria-describedby="grid-help">
               <thead>
                 <tr>
                   <th className="name">{t('Staff')}</th>
@@ -572,6 +592,12 @@ export function RosterView(props: Props) {
                     {t('Wknd')}
                     <span className="sub">{t('of {n}', { n: weekendCount })}</span>
                   </th>
+                  {view.columns && (
+                    <>
+                      <th className="stat">{t('Nights')}</th>
+                      <th className="stat wishes-col">{t('Wishes')}</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -636,7 +662,12 @@ export function RosterView(props: Props) {
                                     onDoubleClick={() => setEditing({ staffId: s.id, date: d })}
                                     onKeyDown={(e) => onCellKey(e, s.id, d)}
                                   >
-                                    {a ? (
+                                    {a && view.times && shiftById.get(a.shift_id) ? (
+                                      <>
+                                        <span className="time">{shiftById.get(a.shift_id)!.start}</span>
+                                        <span className="time">{endText(shiftById.get(a.shift_id)!.end)}</span>
+                                      </>
+                                    ) : a ? (
                                       <>
                                         <span className={(shiftById.get(a.shift_id)?.code ?? a.shift_id).length > 2 ? 'code-long' : undefined}>
                                           {shiftById.get(a.shift_id)?.code ?? a.shift_id}
@@ -663,6 +694,16 @@ export function RosterView(props: Props) {
                               {st && Math.abs(diff) >= 8 && <span className="note">{t(diff > 0 ? '{h} h over' : '{h} h under', { h: Math.round(Math.abs(diff)) })}</span>}
                             </td>
                             <td className={`stat ${st && st.weekends_worked > Math.ceil(weekendCount / 2) ? 'warn' : ''}`}>{st?.weekends_worked ?? ''}</td>
+                            {view.columns && (
+                              <>
+                                <td className="stat">{st?.night_shifts || ''}</td>
+                                <td className="stat wishes-col" title={s.note}>
+                                  <button type="button" className="name-btn" onClick={() => props.openPerson(s.id)}>
+                                    {s.note}
+                                  </button>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         )
                       })}
@@ -734,7 +775,7 @@ export function RosterView(props: Props) {
             </table>
           </div>
           <p id="grid-help" className="grid-help no-print">
-            {t('Arrow keys move. Type a shift code ({codes}) or 0 to set a shift; Enter opens the cell; Ctrl+Z undoes. Shift-click copies the selected cell across a range. Your edits are locked and rechecked instantly.', {
+            {t('Arrow keys move. Type a shift code ({codes}) to set a shift, or 0 to take the person off it; Enter opens the cell; Ctrl+Z undoes. Shift-click copies the selected cell across a range. Your edits are locked and rechecked instantly.', {
               codes: project.shift_types.map((s) => s.code).join(', '),
             })}
           </p>
@@ -1338,10 +1379,14 @@ function FairnessCard({ project, evaluation, onLedgerChange }: { project: Projec
   )
 }
 
-function dayClass(date: ISODate, holidays: Map<string, unknown>): string {
-  if (holidays.has(date)) return 'holiday'
+function dayClass(date: ISODate, holidays: Map<string, { major?: boolean }>): string {
+  const h = holidays.get(date)
+  if (h) return h.major ? 'holiday major' : 'holiday'
   return weekday(date) >= 5 ? 'weekend' : ''
 }
+
+/** Midnight reads 00:00, as on the planner's sheet. */
+const endText = (end: string) => (end === '24:00' ? '00:00' : end)
 
 function abbreviate(name: string): string {
   return name.slice(0, 2)

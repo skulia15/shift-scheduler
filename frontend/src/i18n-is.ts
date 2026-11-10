@@ -119,8 +119,8 @@ export const IS: Record<string, string> = {
   'Show only gaps': 'Sýna aðeins eyður',
   'Show all {n} rows': 'Sýna allar {n} línur',
   '{n} of {m}': '{n} af {m}',
-  'Arrow keys move. Type a shift code ({codes}) or 0 to set a shift; Enter opens the cell; Ctrl+Z undoes. Shift-click copies the selected cell across a range. Your edits are locked and rechecked instantly.':
-    'Örvalyklar færa. Sláðu inn vaktakóða ({codes}) eða 0 til að setja vakt; Enter opnar reitinn; Ctrl+Z afturkallar. Shift-smellur afritar valinn reit yfir tímabil. Breytingar þínar læsast og eru yfirfarnar strax.',
+  'Arrow keys move. Type a shift code ({codes}) to set a shift, or 0 to take the person off it; Enter opens the cell; Ctrl+Z undoes. Shift-click copies the selected cell across a range. Your edits are locked and rechecked instantly.':
+    'Örvalyklar færa. Sláðu inn vaktakóða ({codes}) til að setja vakt, eða 0 til að taka af vakt; Enter opnar reitinn; Ctrl+Z afturkallar. Shift-smellur afritar valinn reit yfir tímabil. Breytingar þínar læsast og eru yfirfarnar strax.',
 
   // Roster: side panel
   'Selected cell and problems': 'Valinn reitur og athugasemdir',
@@ -663,4 +663,10 @@ export const IS: Record<string, string> = {
   'not on shift': 'ekki á vakt',
   'Remove from shift': 'Taka af vakt',
   'Leaves the day empty. Holiday leave and day-off requests are entered under Leave.': 'Dagurinn verður auður. Orlof og óskir um frí eru skráð undir Leyfi.',
+  // View options
+  'View': 'Útlit',
+  'Clock times in the cells (instead of codes)': 'Klukkutímar í reitum (í stað kóða)',
+  'Colours as in the Excel sheet': 'Litir eins og í Excel-skýrslunni',
+  'Compact: a month and more people on one screen': 'Þétt: mánuður og fleiri starfsmenn á einum skjá',
+  'Night shifts and wishes next to the hours': 'Næturvaktir og óskir við hliðina á tímum',
 }

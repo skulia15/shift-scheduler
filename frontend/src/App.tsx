@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, setApiLang } from './api'
 import { CheckIcon, PencilIcon, RibbonMark } from './components/icons'
 import { I18nContext, makeI18n, type Lang } from './i18n'
+import { setPalette } from './shiftColors'
 import { download, usePersisted } from './store'
-import type { Assignment, Change, Evaluation, Project, SolveResult } from './types'
+import type { Assignment, Change, Evaluation, Project, SolveResult, ViewPrefs } from './types'
 import { DemandView } from './views/DemandView'
 import { PersonPanel } from './views/PersonPanel'
 import { LeaveView } from './views/LeaveView'
@@ -26,6 +27,8 @@ export default function App() {
   }, [lang])
 
   const [tab, setTab] = usePersisted<Tab>('tab', 'Roster')
+  const [view, setView] = usePersisted<ViewPrefs>('view', { times: true, sheet: true, compact: false, columns: true })
+  setPalette(view.sheet ? 'sheet' : 'app')
   const [stored, setProject] = usePersisted<Project | null>('project', null)
   // Defaults for fields added since a project was saved come from the server's demo project.
   const [defaults, setDefaults] = useState<Project | null>(null)
@@ -224,6 +227,8 @@ export default function App() {
               }}
               onNextPeriod={startNextPeriod}
               openPerson={setPersonId}
+              view={view}
+              setView={setView}
             />
           )}
           {tab === 'Setup' && <SetupView project={project} setProject={setProject} roster={roster} setRoster={setRoster} openPerson={setPersonId} />}

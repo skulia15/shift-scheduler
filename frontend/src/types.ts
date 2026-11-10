@@ -11,6 +11,7 @@ export interface ShiftType {
   break_minutes: number
   is_night: boolean
   category: ShiftKind | null
+  text_color?: string | null
 }
 
 export interface StaffGroup {
@@ -347,4 +348,16 @@ export interface WorkbookImport {
   staffing: StaffingRead[]
   wishes: WishSuggestion[]
   warnings: string[]
+}
+
+/** How the roster grid looks; kept per browser. */
+export interface ViewPrefs {
+  /** Clock times (08:00 / 16:00) in the cells instead of codes. */
+  times: boolean
+  /** The planner's Excel colours: shifts, weekend and holiday columns, leave. */
+  sheet: boolean
+  /** Small cells so a month and many people fit on one screen. */
+  compact: boolean
+  /** Night shifts and wishes next to the hours. */
+  columns: boolean
 }
