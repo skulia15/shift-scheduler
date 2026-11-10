@@ -4,7 +4,7 @@ import { CloseIcon } from '../components/icons'
 import { periodDates } from '../dates'
 import { useI18n } from '../i18n'
 import { patchAt, removeAt } from '../lists'
-import { shiftColor } from '../shiftColors'
+import { KINDS, shiftColor, shiftKind, type ShiftKind } from '../shiftColors'
 import { newId } from '../store'
 import type { Assignment, Project } from '../types'
 
@@ -199,7 +199,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                 className="btn"
                 onClick={() => {
                   const id = newId('S', p.shift_types)
-                  set({ shift_types: [...p.shift_types, { id, code: id, name: t('New shift'), start: '08:00', end: '16:00', break_minutes: 0, is_night: false }] })
+                  set({ shift_types: [...p.shift_types, { id, code: id, name: t('New shift'), start: '08:00', end: '16:00', break_minutes: 0, is_night: false, category: 'morning' }] })
                 }}
               >
                 {t('Add shift')}
@@ -215,13 +215,13 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                     <th>{t('Starts')}</th>
                     <th>{t('Ends')}</th>
                     <th>{t('Unpaid break')}</th>
-                    <th>{t('Night')}</th>
+                    <th>{t('Kind')}</th>
                     <th />
                   </tr>
                 </thead>
                 <tbody>
                   {p.shift_types.map((s, idx) => {
-                    const c = shiftColor(idx)
+                    const c = shiftColor(s)
                     const patch = (v: Partial<typeof s>) => set({ shift_types: patchAt(p.shift_types, idx, v) })
                     return (
                       <tr key={s.id}>
@@ -250,7 +250,20 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                           </span>
                         </td>
                         <td>
-                          <input type="checkbox" aria-label={t('Night')} checked={s.is_night} onChange={(e) => patch({ is_night: e.target.checked })} />
+                          <select
+                            aria-label={t('Kind')}
+                            value={shiftKind(s)}
+                            onChange={(e) => {
+                              const category = e.target.value as ShiftKind
+                              patch({ category, is_night: category === 'night' })
+                            }}
+                          >
+                            {KINDS.map((k) => (
+                              <option key={k} value={k}>
+                                {t({ morning: 'Morning (MV)', evening: 'Evening (KV)', night: 'Night (NV)' }[k])}
+                              </option>
+                            ))}
+                          </select>
                         </td>
                         <td className="right">
                           <RemoveButton label={t('Remove shift type')} onClick={() => set({ shift_types: removeAt(p.shift_types, idx) })} />
@@ -284,6 +297,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                           target_hours_override: null,
                           competence_ids: [],
                           employee_number: null,
+                          note: '',
                         },
                       ],
                     })
@@ -305,6 +319,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                     <th title={t('None ticked: may work any shift')}>{t('May work')}</th>
                     {p.competences.length > 0 && <th>{t('Skills')}</th>}
                     <th title={t('Contract hours for the whole period, instead of employment %')}>{t('Hours override')}</th>
+                    <th>{t('Wishes')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -358,6 +373,15 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                       )}
                       <td>
                         <NumberField width={80} nullable placeholder={t('Auto')} value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, idx, { target_hours_override: v }) })} />
+                      </td>
+                      <td className="wish">
+                        <textarea
+                          aria-label={t('{name}: wishes', { name: s.name })}
+                          placeholder={t('e.g. every other weekend, no evenings')}
+                          title={s.note}
+                          value={s.note}
+                          onChange={(e) => set({ staff: patchAt(p.staff, idx, { note: e.target.value }) })}
+                        />
                       </td>
                       <td className="right">
                         <RemoveButton label={t('Remove {name}', { name: s.name })} onClick={() => removePerson(idx)} />

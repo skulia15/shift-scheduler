@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import { CloseIcon, ErrorDot, WarnDot } from '../components/icons'
 import { useI18n } from '../i18n'
-import { shiftColor } from '../shiftColors'
+import { KINDS, shiftColor, shiftKind, type ShiftKind } from '../shiftColors'
 import type { Assignment, Evaluation, ISODate, Project, Violation } from '../types'
 
 interface Props {
@@ -43,14 +43,17 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
 
   const options = useMemo(
     () => [
-      { id: null as string | null, code: t('Off'), name: t('Off'), time: '', color: { bg: '#e6ebe9', fg: '#2d3538' }, allowed: true },
-      ...project.shift_types.map((s, idx) => ({
+      { id: null as string | null, code: t('Off'), name: t('Off'), time: '', color: { bg: '#e6ebe9', fg: '#2d3538' }, allowed: true, kind: null as ShiftKind | null },
+      ...[...project.shift_types]
+        .sort((x, y) => KINDS.indexOf(shiftKind(x)) - KINDS.indexOf(shiftKind(y)) || x.start.localeCompare(y.start))
+        .map((s) => ({
         id: s.id as string | null,
         code: s.code,
         name: s.name,
         time: i.timeRange(s.start, s.end),
-        color: shiftColor(idx),
+        color: shiftColor(s),
         allowed: staff.allowed_shift_ids === null || staff.allowed_shift_ids.includes(s.id),
+        kind: shiftKind(s) as ShiftKind | null,
       })),
     ],
     [project.shift_types, staff.allowed_shift_ids, i, t],
@@ -151,33 +154,37 @@ export function ShiftDialog({ project, roster, evaluation, staffId, date, onAppl
 
         <fieldset>
           <legend>{t('Shift')}</legend>
-          <div className="shift-options" role="radiogroup" aria-label={t('Shift')}>
-            {options.map((o) => {
+          <div className={`shift-options ${options.length > 6 ? 'compact' : ''}`} role="radiogroup" aria-label={t('Shift')}>
+            {options.map((o, idx) => {
               const effect = effects[o.id ?? 'off']
+              const kind = o.kind
+              const header = kind && options[idx - 1]?.kind !== kind && options.length > 6
               return (
-                <button
-                  key={o.id ?? 'off'}
-                  type="button"
-                  role="radio"
-                  aria-checked={shiftId === o.id}
-                  disabled={!o.allowed}
-                  className="shift-option"
-                  onClick={() => setShiftId(o.id)}
-                >
-                  <span className="badge lg" style={{ background: o.color.bg, color: o.color.fg, fontSize: o.id ? 16 : 12 }}>
-                    {o.code}
-                  </span>
-                  <span className="text">
-                    <span className="name">
-                      {o.name} <span className="time">{o.time}</span>
+                <div key={o.id ?? 'off'} style={{ display: 'contents' }}>
+                  {header && <span className="option-group">{t({ morning: 'Morning shifts', evening: 'Evening shifts', night: 'Night shifts' }[kind])}</span>}
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={shiftId === o.id}
+                    disabled={!o.allowed}
+                    className="shift-option"
+                    onClick={() => setShiftId(o.id)}
+                  >
+                    <span className="badge lg" style={{ background: o.color.bg, color: o.color.fg, fontSize: o.id ? 16 : 12 }}>
+                      {o.code}
                     </span>
-                    <span className={`effect ${o.allowed ? (effect?.severity ?? 'pending') : 'pending'}`}>
-                      {!o.allowed ? t('Not allowed for {name}', { name: staff.name }) : (effect?.text ?? t('Checking…'))}
+                    <span className="text">
+                      <span className="name">
+                        {o.name} <span className="time">{o.time}</span>
+                      </span>
+                      <span className={`effect ${o.allowed ? (effect?.severity ?? 'pending') : 'pending'}`}>
+                        {!o.allowed ? t('Not allowed for {name}', { name: staff.name }) : (effect?.text ?? t('Checking…'))}
+                      </span>
                     </span>
-                  </span>
-                  {effect?.severity === 'error' && <ErrorDot size={16} />}
-                  {effect?.severity === 'warning' && <WarnDot size={16} />}
-                </button>
+                    {effect?.severity === 'error' && <ErrorDot size={16} />}
+                    {effect?.severity === 'warning' && <WarnDot size={16} />}
+                  </button>
+                </div>
               )
             })}
           </div>

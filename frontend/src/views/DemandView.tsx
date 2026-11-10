@@ -34,7 +34,7 @@ function DatesField({ value, onChange }: { value: string[] | null; onChange: (v:
 
 function ShiftBadge({ project, shiftId }: { project: Project; shiftId: string }) {
   const idx = project.shift_types.findIndex((s) => s.id === shiftId)
-  const c = shiftColor(Math.max(0, idx))
+  const c = shiftColor(project.shift_types[idx])
   return (
     <span className="badge" style={{ background: c.bg, color: c.fg }}>
       {project.shift_types[idx]?.code ?? '?'}
@@ -145,7 +145,14 @@ export function DemandView({ project: p, setProject }: Props) {
                     <td>
                       <Options label={t('Group')} value={c.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
                     </td>
-                    <td>{c.dates ? <span className="muted">{t('Only the dates listed')}</span> : <Checks values={c.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />}</td>
+                    <td>
+                      {c.dates ? <span className="muted">{t('Only the dates listed')}</span> : <Checks values={c.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />}
+                      {c.note && (
+                        <span className="muted small" style={{ display: 'block', marginTop: 4 }} title={t('Read from the planner’s sheet')}>
+                          “{c.note}”
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <DatesField value={c.dates} onChange={(dates) => patch({ dates })} />
                     </td>

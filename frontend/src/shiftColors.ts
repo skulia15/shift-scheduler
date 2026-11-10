@@ -1,13 +1,26 @@
-/** Shift colours by shift-type position: morning, evening, night, then extras for added shift types. */
-const PALETTE = [
-  { bg: '#f6e6a6', fg: '#4a3b00' },
-  { bg: '#f2c9c2', fg: '#5c1f17' },
-  { bg: '#1f3a5f', fg: '#e8f0fa' },
-  { bg: '#cfe7e4', fg: '#084f4b' },
-  { bg: '#e2d7f0', fg: '#3b2560' },
-  { bg: '#d9e6c8', fg: '#2c4214' },
-]
+import type { ShiftType } from './types'
 
-export function shiftColor(index: number) {
-  return PALETTE[index % PALETTE.length]
+export type ShiftKind = 'morning' | 'evening' | 'night'
+
+const COLORS: Record<ShiftKind, { bg: string; fg: string }> = {
+  morning: { bg: '#f6e6a6', fg: '#4a3b00' },
+  evening: { bg: '#f2c9c2', fg: '#5c1f17' },
+  night: { bg: '#1f3a5f', fg: '#e8f0fa' },
 }
+
+const minutes = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5))
+
+/** Morning, evening or night: the shift's category if set, else from its start time (as the server does). */
+export function shiftKind(s: Pick<ShiftType, 'category' | 'is_night' | 'start'>): ShiftKind {
+  if (s.category) return s.category
+  if (s.is_night) return 'night'
+  const start = minutes(s.start)
+  return start < 12 * 60 ? 'morning' : start < 20 * 60 + 30 ? 'evening' : 'night'
+}
+
+/** Every shift of a kind shares its colour, however many clock-time variants the unit uses. */
+export function shiftColor(s: Pick<ShiftType, 'category' | 'is_night' | 'start'> | undefined) {
+  return s ? COLORS[shiftKind(s)] : { bg: '#e6ebe9', fg: '#2d3538' }
+}
+
+export const KINDS: ShiftKind[] = ['morning', 'evening', 'night']

@@ -367,3 +367,10 @@ fieldset.limits legend { padding: 0 6px; font-weight: 700; color: var(--slate); 
   table.roster { font-size: 9px; }
   @page { size: landscape; margin: 8mm; }
 }
+.cell .code-long { font-size: 10px; letter-spacing: -0.02em; }
+.option-group { font-size: 12px; font-weight: 700; color: var(--ink-3); margin: 8px 0 2px; }
+.wish { max-width: 280px; }
+.wish textarea { width: 100%; min-height: 38px; border-radius: 10px; border: 1px solid var(--input); padding: 6px 10px; font-size: 13px; resize: vertical; }
+.shift-options.compact .shift-option { min-height: 44px; padding: 4px 10px; }
+.shift-options.compact .shift-option[aria-checked=true] { padding: 2.5px 8.5px; }
+.shift-options.compact .badge.lg { width: 34px; height: 34px; font-size: 13px !important; }

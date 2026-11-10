@@ -10,6 +10,7 @@ export interface ShiftType {
   end: string
   break_minutes: number
   is_night: boolean
+  category: 'morning' | 'evening' | 'night' | null
 }
 
 export interface StaffGroup {
@@ -26,6 +27,7 @@ export interface Staff {
   target_hours_override: number | null
   competence_ids: string[]
   employee_number: string | null
+  note: string
 }
 
 export interface Competence {
@@ -56,6 +58,7 @@ export interface CoverageDemand {
   dates: ISODate[] | null
   min: number
   max: number | null
+  note?: string
 }
 
 export interface TaskDemand {
@@ -278,5 +281,25 @@ export interface ImportResult {
   unmatched_names: string[]
   unknown_codes: Record<string, number>
   outside_period: number
+  warnings: string[]
+}
+
+export interface StaffingRead {
+  note: string
+  shift_id: string | null
+  rows: number
+  certain: boolean
+  detail: string
+}
+
+export interface WorkbookImport {
+  project: Project
+  roster: Assignment[]
+  sheet: string
+  people: number
+  named: boolean
+  shifts_imported: number
+  shift_types: number
+  staffing: StaffingRead[]
   warnings: string[]
 }
