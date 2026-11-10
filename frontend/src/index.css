@@ -423,3 +423,4 @@ button.link { font-weight: 600; min-width: 160px; }
 .roster-layout.compact .grid-box { max-height: calc(100vh - 230px); }
 .roster .wishes-col { max-width: 220px; text-align: left; }
 .roster td.wishes-col .name-btn { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; font-size: 12px; color: var(--ink-2); }
+td.center { text-align: center; }

@@ -344,6 +344,7 @@ export function SetupView({ project: p, setProject, roster, setRoster, openPerso
                     <th title={t('None ticked: may work any shift')}>{t('May work')}</th>
                     {p.competences.length > 0 && <th>{t('Skills')}</th>}
                     <th title={t('Contract hours for the whole period, instead of employment %')}>{t('Hours override')}</th>
+                    <th title={t('When anyone is ticked, nights go to them first; nights for others cost points')}>{t('Night worker')}</th>
                     <th>{t('Wishes')}</th>
                     <th />
                   </tr>
@@ -398,6 +399,14 @@ export function SetupView({ project: p, setProject, roster, setRoster, openPerso
                       )}
                       <td>
                         <NumberField width={80} nullable placeholder={t('Auto')} value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, idx, { target_hours_override: v }) })} />
+                      </td>
+                      <td className="center">
+                        <input
+                          type="checkbox"
+                          aria-label={t('{name} works nights', { name: s.name })}
+                          checked={!!s.night_worker}
+                          onChange={(e) => set({ staff: patchAt(p.staff, idx, { night_worker: e.target.checked }) })}
+                        />
                       </td>
                       <td className="wish">
                         <button type="button" className="wish-btn" aria-label={t('{name}: wishes', { name: s.name })} title={s.note} onClick={() => openPerson(s.id)}>

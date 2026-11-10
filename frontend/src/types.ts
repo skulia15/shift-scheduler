@@ -29,6 +29,8 @@ export interface Staff {
   competence_ids: string[]
   employee_number: string | null
   note: string
+  /** One of the unit's night workers; when anyone is, nights for others cost points. */
+  night_worker?: boolean
 }
 
 export interface Competence {
@@ -162,6 +164,7 @@ export interface Weights {
   coverage_shortfall: number
   preferred_shortfall: number
   fallback_use: number
+  night_outside_pool: number
 }
 
 interface RuleBase {

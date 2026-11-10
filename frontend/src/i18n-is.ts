@@ -671,4 +671,8 @@ export const IS: Record<string, string> = {
   'Night shifts and wishes next to the hours': 'Næturvaktir og óskir við hliðina á tímum',
   'Every wish is met. Tick Show met to see them.': 'Allar óskir eru uppfylltar. Hakaðu í Sýna uppfylltar til að sjá þær.',
   'Only day-off requests so far, all met. Write wishes on each person (click a name).': 'Aðeins óskir um frí enn sem komið er, allar uppfylltar. Skráðu óskir á hvern starfsmann (smelltu á nafn).',
+  'Night worker': 'Næturvaktafólk',
+  'When anyone is ticked, nights go to them first; nights for others cost points': 'Ef einhver er merktur fá þeir næturvaktir fyrst; næturvaktir annarra kosta refsistig',
+  '{name} works nights': '{name} tekur næturvaktir',
+  'A night shift for someone not marked as a night worker': 'Næturvakt hjá starfsmanni sem er ekki merktur næturvaktafólk',
 }

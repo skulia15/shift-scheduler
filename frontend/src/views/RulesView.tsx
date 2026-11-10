@@ -89,6 +89,7 @@ const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
   { key: 'overstaff', label: 'Each extra person above minimum' },
   { key: 'preferred_shortfall', label: 'Each person below a preferred headcount' },
   { key: 'fallback_use', label: 'Each person on an only-when-short shift' },
+  { key: 'night_outside_pool', label: 'A night shift for someone not marked as a night worker' },
   { key: 'change_detail', label: 'Repair: hallway or task changed' },
 ]
 
