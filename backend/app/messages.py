@@ -49,6 +49,18 @@ IS = {
     "no area": "engu",
     "{label}: {name} has an uneven shift mix ({mix})": "{label}: {name} er með ójafna vaktablöndu ({mix})",
     "{label}: {name} {a} → {b}": "{label}: {name} {a} → {b}",
+    "morning": "MV",
+    "evening": "KV",
+    "night": "NV",
+    "{label}: {name} works a weekend": "{label}: {name} vinnur um helgi",
+    "{label}: {name} works more than 1 in {n} weekends": "{label}: {name} vinnur oftar en 1 af hverjum {n} helgum",
+    "{label}: {name} works only one day of the weekend": "{label}: {name} vinnur aðeins annan helgardaginn",
+    "{label}: {name} is on {shift}": "{label}: {name} er á vaktinni {shift}",
+    "{label}: {name} is not on their usual shift": "{label}: {name} er ekki á sinni föstu vakt",
+    "{label}: {name} works on a day they are not available": "{label}: {name} vinnur á degi sem hentar ekki",
+    "{label}: {name} has {n} in the week of {week} (max {max})": "{label}: {name} er með {n} í vikunni sem hefst {week} (hámark {max})",
+    "{label}: {name} has {n} in the week of {week} (min {min})": "{label}: {name} er með {n} í vikunni sem hefst {week} (lágmark {min})",
+    "{label}: {name} works {n} shifts without {other}": "{label}: {name} er á {n} vöktum án {other}",
 }
 
 

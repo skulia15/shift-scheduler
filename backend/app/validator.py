@@ -10,6 +10,7 @@ from collections import Counter, defaultdict
 from .context import Context, build_context
 from .messages import message
 from .models import (
+    AllowedShiftsRule,
     Assignment,
     AvoidTaskRepeatRule,
     CoverageCell,
@@ -19,9 +20,14 @@ from .models import (
     ForbidSequenceRule,
     MaxShiftTypeRule,
     Project,
+    RecurringShiftRule,
     RotateTaskEvenlyRule,
+    ShiftsPerWeekRule,
     StaffStats,
+    UnavailableWeekdaysRule,
     Violation,
+    WeekendPatternRule,
+    WorkTogetherRule,
 )
 
 
@@ -350,9 +356,13 @@ def _custom_rules(
 
         elif isinstance(rule, DiverseShiftsRule):
             s = ctx.staff_index[rule.staff_id]
-            types = [t for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
-            if len(types) >= 2:
+            if rule.by_kind:
+                kinds = sorted({ctx.shifts[t].kind for t in ctx.eligible[s] if rule.kinds is None or ctx.shifts[t].kind in rule.kinds})
+                counts = {M(k): sum(1 for tt, _ in by_staff[s].values() if ctx.shifts[tt].kind == k) for k in kinds}
+            else:
+                types = [t for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
                 counts = {ctx.shifts[t].code: sum(1 for tt, _ in by_staff[s].values() if tt == t) for t in types}
+            if len(counts) >= 2:
                 if max(counts.values()) - min(counts.values()) > 1:
                     mix = ", ".join(f"{code} {n}" for code, n in counts.items())
                     v(rule.id, severity, M("{label}: {name} has an uneven shift mix ({mix})", label=label, name=ctx.staff[s].name, mix=mix), s)
@@ -366,3 +376,71 @@ def _custom_rules(
                     nxt = by_staff[s].get(d + 1)
                     if t == a and nxt and nxt[0] == b:
                         v(rule.id, severity, M("{label}: {name} {a} → {b}", label=label, name=ctx.staff[s].name, a=shift_name.get(rule.from_shift_id, rule.from_shift_id), b=shift_name.get(rule.to_shift_id, rule.to_shift_id)), s, d + 1, b)
+
+        elif isinstance(rule, (WeekendPatternRule, AllowedShiftsRule, RecurringShiftRule, UnavailableWeekdaysRule, ShiftsPerWeekRule, WorkTogetherRule)):
+            _person_rule(ctx, rule, by_staff, severity, label, v, M)
+
+
+def _person_rule(ctx: Context, rule, by_staff, severity: str, label: str, v, M) -> None:
+    s = ctx.staff_index[rule.staff_id]
+    name = ctx.staff[s].name
+    mine = by_staff[s]
+    dates = ctx.dates
+
+    def matches(t: int) -> bool:
+        return ctx.shift_matches(t, rule.kinds, rule.shift_ids)
+
+    if isinstance(rule, WeekendPatternRule):
+        worked = [any(d in mine for d in days) for days in ctx.weekends()]
+        if rule.every == 0:
+            for days, w in zip(ctx.weekends(), worked):
+                if w:
+                    v(rule.id, severity, M("{label}: {name} works a weekend", label=label, name=name), s, days[0])
+        else:
+            seq = [ctx.weekend_before(s)] + worked
+            for i in range(1, len(seq)):
+                window = seq[max(0, i - rule.every + 1) : i + 1]
+                if seq[i] and sum(window) > 1:
+                    days = ctx.weekends()[i - 1]
+                    v(rule.id, severity, M("{label}: {name} works more than 1 in {n} weekends", label=label, name=name, n=rule.every), s, days[0])
+        if rule.both_days:
+            for days in ctx.weekends():
+                if len(days) == 2 and (days[0] in mine) != (days[1] in mine):
+                    v(rule.id, severity, M("{label}: {name} works only one day of the weekend", label=label, name=name), s, days[0])
+
+    elif isinstance(rule, AllowedShiftsRule):
+        for d, (t, _) in sorted(mine.items()):
+            if dates[d].weekday() in rule.weekdays and not matches(t):
+                v(rule.id, severity, M("{label}: {name} is on {shift}", label=label, name=name, shift=ctx.shifts[t].name), s, d, t)
+
+    elif isinstance(rule, RecurringShiftRule):
+        for d, day in enumerate(dates):
+            if day.weekday() in rule.weekdays and (s, d) not in ctx.blocked and not (d in mine and matches(mine[d][0])):
+                v(rule.id, severity, M("{label}: {name} is not on their usual shift", label=label, name=name), s, d)
+
+    elif isinstance(rule, UnavailableWeekdaysRule):
+        for d, (t, _) in sorted(mine.items()):
+            if dates[d].weekday() in rule.weekdays:
+                v(rule.id, severity, M("{label}: {name} works on a day they are not available", label=label, name=name), s, d, t)
+
+    elif isinstance(rule, ShiftsPerWeekRule):
+        for week in ctx.weeks():
+            n = sum(1 for d in week if d in mine and dates[d].weekday() in rule.weekdays and matches(mine[d][0]))
+            full = len(week) == 7 and not any((s, d) in ctx.blocked for d in week)
+            if rule.max is not None and n > rule.max:
+                v(rule.id, severity, M("{label}: {name} has {n} in the week of {week} (max {max})", label=label, name=name, n=n, week=dates[week[0]].isoformat(), max=rule.max), s, week[0])
+            elif rule.min and full and n < rule.min:
+                v(rule.id, severity, M("{label}: {name} has {n} in the week of {week} (min {min})", label=label, name=name, n=n, week=dates[week[0]].isoformat(), min=rule.min), s, week[0])
+
+    elif isinstance(rule, WorkTogetherRule):
+        o = ctx.staff_index[rule.other_staff_id]
+        theirs = by_staff[o]
+        apart = 0
+        for d, (t, _) in mine.items():
+            if not matches(t):
+                continue
+            other = theirs.get(d)
+            if other is None or ctx.shifts[other[0]].kind != ctx.shifts[t].kind:
+                apart += 1
+        if apart:
+            v(rule.id, severity, M("{label}: {name} works {n} shifts without {other}", label=label, name=name, n=apart, other=ctx.staff[o].name), s)

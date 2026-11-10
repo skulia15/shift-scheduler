@@ -144,6 +144,29 @@ class Context:
         return math.ceil(ratio * len(self.weekends()) - 1e-9)
 
 
+    def shift_matches(self, t: int, kinds: list[str] | None, shift_ids: list[str] | None) -> bool:
+        """Whether shift type t passes a person rule's filter (None = any)."""
+        sh = self.shifts[t]
+        return (kinds is None or sh.kind in kinds) and (shift_ids is None or sh.id in shift_ids)
+
+    def weeks(self) -> list[list[int]]:
+        """Day indices of each Monday–Sunday week touching the period (first and last may be partial)."""
+        result: dict[tuple[int, int], list[int]] = {}
+        for d, day in enumerate(self.dates):
+            result.setdefault(day.isocalendar()[:2], []).append(d)
+        return list(result.values())
+
+    def weekend_before(self, staff: int) -> bool:
+        """Whether the person worked the last weekend before the period's first one (from history)."""
+        weekends = self.weekends()
+        if not weekends:
+            return False
+        first = self.dates[weekends[0][0]]
+        saturday = first - timedelta(days=first.weekday() - 5) - timedelta(days=7)
+        offset = (saturday - self.dates[0]).days
+        return any((staff, d) in self.history for d in (offset, offset + 1))
+
+
 def _demand_applies(weekdays: list[int], dates: list[date] | None, day: date) -> tuple[bool, bool]:
     """(applies, is_date_override)"""
     if dates is not None:

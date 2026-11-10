@@ -21,6 +21,9 @@ def parse_clock(value: str) -> int:
     return int(hours) * 60 + int(minutes)
 
 
+ShiftKind = Literal["morning", "evening", "night"]
+
+
 class ShiftType(BaseModel):
     id: str
     code: str = Field(description="Short label shown in the roster grid, e.g. 'M', 'K', 'N'")
@@ -29,7 +32,7 @@ class ShiftType(BaseModel):
     end: str = Field(pattern=r"^\d{2}:\d{2}$", description="May be earlier than start: crosses midnight")
     break_minutes: int = 0
     is_night: bool = False
-    category: Literal["morning", "evening", "night"] | None = Field(
+    category: ShiftKind | None = Field(
         None, description="MV / KV / NV; None = from the start time (night if is_night)"
     )
 
@@ -299,11 +302,73 @@ class FixedAreaRule(_RuleBase):
 
 class DiverseShiftsRule(_RuleBase):
     """A person's shift-type counts stay balanced (max − min ≤ 1 when hard).
-    `shift_ids` limits which types are balanced; None = every type they may work."""
+    `shift_ids` limits which types are balanced; None = every type they may work.
+    `by_kind` balances morning / evening / night instead of individual shift types."""
 
     type: Literal["diverse_shifts"] = "diverse_shifts"
     staff_id: str
     shift_ids: list[str] | None = None
+    by_kind: bool = False
+    kinds: list[ShiftKind] | None = Field(None, description="With by_kind: the kinds to balance; None = all they may work")
+
+
+class _ShiftFilter(BaseModel):
+    """Which shifts a person rule is about: kinds and/or shift types (both None = any shift)."""
+
+    kinds: list[ShiftKind] | None = None
+    shift_ids: list[str] | None = None
+
+
+class WeekendPatternRule(_RuleBase):
+    """Works at most one of every `every` weekends (0 = no weekends), counting the weekend just
+    before the period. With `both_days`, a worked weekend is Saturday and Sunday."""
+
+    type: Literal["weekend_pattern"] = "weekend_pattern"
+    staff_id: str
+    every: int = Field(2, ge=0, le=8)
+    both_days: bool = False
+
+
+class AllowedShiftsRule(_RuleBase, _ShiftFilter):
+    """On the given weekdays, a person works only these shifts (soft: prefers them)."""
+
+    type: Literal["allowed_shifts"] = "allowed_shifts"
+    staff_id: str
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)), description="0=Mon … 6=Sun")
+
+
+class RecurringShiftRule(_RuleBase, _ShiftFilter):
+    """A person works on these weekdays every week (with one of these shifts, if given)."""
+
+    type: Literal["recurring_shift"] = "recurring_shift"
+    staff_id: str
+    weekdays: list[int]
+
+
+class UnavailableWeekdaysRule(_RuleBase):
+    """A person does not work on these weekdays."""
+
+    type: Literal["unavailable_weekdays"] = "unavailable_weekdays"
+    staff_id: str
+    weekdays: list[int]
+
+
+class ShiftsPerWeekRule(_RuleBase, _ShiftFilter):
+    """Matching shifts per Monday–Sunday week. `min` applies to full weeks only."""
+
+    type: Literal["shifts_per_week"] = "shifts_per_week"
+    staff_id: str
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)))
+    min: int | None = None
+    max: int | None = None
+
+
+class WorkTogetherRule(_RuleBase, _ShiftFilter):
+    """Two people prefer the same shifts: each matching shift one works without the other costs."""
+
+    type: Literal["work_together"] = "work_together"
+    staff_id: str
+    other_staff_id: str
 
 
 CustomRule = Annotated[
@@ -312,7 +377,13 @@ CustomRule = Annotated[
     | MaxShiftTypeRule
     | ForbidSequenceRule
     | FixedAreaRule
-    | DiverseShiftsRule,
+    | DiverseShiftsRule
+    | WeekendPatternRule
+    | AllowedShiftsRule
+    | RecurringShiftRule
+    | UnavailableWeekdaysRule
+    | ShiftsPerWeekRule
+    | WorkTogetherRule,
     Field(discriminator="type"),
 ]
 
@@ -396,8 +467,12 @@ class Project(BaseModel):
             if ad.area_id not in area_ids or ad.shift_id not in shift_ids or ad.group_id not in group_ids:
                 problems.append(f"area demand {ad.area_id}/{ad.shift_id}/{ad.group_id}: unknown area, shift or group")
         for rule in self.custom_rules:
-            if isinstance(rule, (FixedAreaRule, DiverseShiftsRule)) and rule.staff_id not in staff_ids:
-                problems.append(f"rule {rule.id}: unknown staff {rule.staff_id}")
+            staff_id = getattr(rule, "staff_id", None)
+            if staff_id is not None and staff_id not in staff_ids:
+                problems.append(f"rule {rule.id}: unknown staff {staff_id}")
+            if isinstance(rule, WorkTogetherRule) and rule.other_staff_id not in staff_ids:
+                problems.append(f"rule {rule.id}: unknown staff {rule.other_staff_id}")
+            problems += [f"rule {rule.id}: unknown shift {t}" for t in getattr(rule, "shift_ids", None) or [] if t not in shift_ids]
             if isinstance(rule, FixedAreaRule) and rule.area_id not in area_ids:
                 problems.append(f"rule {rule.id}: unknown area {rule.area_id}")
         if problems:

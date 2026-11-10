@@ -13,14 +13,20 @@ from .context import Context, build_context
 from .models import (
     Assignment,
     Change,
+    AllowedShiftsRule,
     AvoidTaskRepeatRule,
     DiverseShiftsRule,
     FixedAreaRule,
     ForbidSequenceRule,
     MaxShiftTypeRule,
     Project,
+    RecurringShiftRule,
     RotateTaskEvenlyRule,
+    ShiftsPerWeekRule,
     SolveResult,
+    UnavailableWeekdaysRule,
+    WeekendPatternRule,
+    WorkTogetherRule,
 )
 from .validator import evaluate, rotation_targets
 
@@ -438,10 +444,17 @@ class _Model:
 
             elif isinstance(rule, DiverseShiftsRule):
                 s = ctx.staff_index[rule.staff_id]
-                types = [t for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
-                if len(types) < 2:
+                if rule.by_kind:
+                    groups: dict[str, list[int]] = {}
+                    for t in sorted(ctx.eligible[s]):
+                        if rule.kinds is None or ctx.shifts[t].kind in rule.kinds:
+                            groups.setdefault(ctx.shifts[t].kind, []).append(t)
+                    types_of = list(groups.values())
+                else:
+                    types_of = [[t] for t in sorted(ctx.eligible[s]) if rule.shift_ids is None or ctx.shifts[t].id in rule.shift_ids]
+                if len(types_of) < 2:
                     continue
-                counts = [sum(self.work.get((s, d, t), 0) for d in range(D)) for t in types]
+                counts = [sum(self.work.get((s, d, t), 0) for d in range(D) for t in ts) for ts in types_of]
                 hi, lo = m.new_int_var(0, D, ""), m.new_int_var(0, D, "")
                 m.add_max_equality(hi, counts)
                 m.add_min_equality(lo, counts)
@@ -458,6 +471,116 @@ class _Model:
                         if x is None or y is None:
                             continue
                         self.soft_le(x + y, 1, rule.hard, rule.weight, 1)
+
+            elif isinstance(rule, (WeekendPatternRule, AllowedShiftsRule, RecurringShiftRule, UnavailableWeekdaysRule, ShiftsPerWeekRule, WorkTogetherRule)):
+                self._person_rule(rule)
+
+    def _matching(self, s: int, d: int, kinds, shift_ids) -> cp_model.LinearExprT:
+        return sum(v for t in self.ctx.eligible[s] if self.ctx.shift_matches(t, kinds, shift_ids) and (v := self.work.get((s, d, t))) is not None)
+
+    def _soft_true(self, expr: cp_model.LinearExprT, hard: bool, weight: int) -> None:
+        """expr (0/1) should be 1: required when hard, else `weight` when it is 0."""
+        if isinstance(expr, int):
+            return
+        if hard:
+            self.m.add(expr == 1)
+        else:
+            self.penalise(1 - expr, weight * OCCURRENCE)
+
+    def _person_rule(self, rule) -> None:
+        """Wishes of one person (weekends, shifts, weekdays, shifts per week, a colleague)."""
+        ctx, m = self.ctx, self.m
+        s = ctx.staff_index[rule.staff_id]
+        dates = ctx.dates
+
+        if isinstance(rule, WeekendPatternRule):
+            worked: list[cp_model.LinearExprT] = []
+            for days in ctx.weekends():
+                load = [self.day_work[s, d] for d in days if not isinstance(self.day_work[s, d], int)]
+                if not load:
+                    worked.append(0)
+                    continue
+                x = m.new_bool_var("")
+                for e in load:
+                    m.add(x >= e)
+                m.add(x <= sum(load))
+                worked.append(x)
+                if rule.both_days and len(load) == 2:
+                    if rule.hard:
+                        m.add(load[0] == load[1])
+                    else:
+                        split = m.new_bool_var("")
+                        m.add(load[0] - load[1] <= split)
+                        m.add(load[1] - load[0] <= split)
+                        self.penalise(split, rule.weight * OCCURRENCE)
+            if rule.every == 0:
+                for x in worked:
+                    self.soft_le(x, 0, rule.hard, rule.weight, 1)
+                return
+            seq = [int(ctx.weekend_before(s))] + worked
+            for i in range(max(1, len(seq) - rule.every + 1)):
+                window = seq[i : i + rule.every]
+                if len(window) > 1:
+                    self.soft_le(sum(window), 1, rule.hard, rule.weight, len(window))
+
+        elif isinstance(rule, AllowedShiftsRule):
+            for d, day in enumerate(dates):
+                if day.weekday() not in rule.weekdays:
+                    continue
+                for t in ctx.eligible[s]:
+                    var = self.work.get((s, d, t))
+                    if var is None or ctx.shift_matches(t, rule.kinds, rule.shift_ids):
+                        continue
+                    if rule.hard:
+                        m.add(var == 0)
+                    else:
+                        self.penalise(var, rule.weight * OCCURRENCE)
+
+        elif isinstance(rule, RecurringShiftRule):
+            for d, day in enumerate(dates):
+                if day.weekday() in rule.weekdays and (s, d) not in ctx.blocked:
+                    self._soft_true(self._matching(s, d, rule.kinds, rule.shift_ids), rule.hard, rule.weight)
+
+        elif isinstance(rule, UnavailableWeekdaysRule):
+            for d, day in enumerate(dates):
+                if day.weekday() in rule.weekdays and not isinstance(self.day_work[s, d], int):
+                    self.soft_le(self.day_work[s, d], 0, rule.hard, rule.weight, 1)
+
+        elif isinstance(rule, ShiftsPerWeekRule):
+            for week in ctx.weeks():
+                days = [d for d in week if dates[d].weekday() in rule.weekdays]
+                n = sum(self._matching(s, d, rule.kinds, rule.shift_ids) for d in days)
+                if isinstance(n, int):
+                    continue
+                if rule.max is not None:
+                    self.soft_le(n, rule.max, rule.hard, rule.weight, len(days))
+                full = len(week) == 7 and not any((s, d) in ctx.blocked for d in week)
+                if rule.min and full:
+                    if rule.hard:
+                        m.add(n >= rule.min)
+                    else:
+                        short = m.new_int_var(0, rule.min, "")
+                        m.add(n + short >= rule.min)
+                        self.penalise(short, rule.weight * OCCURRENCE)
+
+        elif isinstance(rule, WorkTogetherRule):
+            o = ctx.staff_index[rule.other_staff_id]
+            kinds = sorted({sh.kind for sh in ctx.shifts})
+            for d in range(ctx.n_days):
+                for kind in kinds:
+                    if rule.kinds is not None and kind not in rule.kinds:
+                        continue
+                    a = self._matching(s, d, [kind], rule.shift_ids)
+                    b = self._matching(o, d, [kind], rule.shift_ids)
+                    if isinstance(a, int) or isinstance(b, int):
+                        continue
+                    if rule.hard:
+                        m.add(a == b)
+                    else:
+                        apart = m.new_bool_var("")
+                        m.add(a - b <= apart)
+                        m.add(b - a <= apart)
+                        self.penalise(apart, rule.weight * OCCURRENCE)
 
     def roster(self, solver: cp_model.CpSolver) -> list[Assignment]:
         ctx = self.ctx
