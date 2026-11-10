@@ -83,6 +83,13 @@ fallback is used 15 times.
 - A wishes report per person: met / not met and why.
 - Export in the workbook's own layout so it can still be printed or sent as before.
 
+Done: monthly periods (15th → 14th, set by the import; Start next period follows the months),
+a wishes report in the rule check and a Wishes panel on the roster (met / missed per person),
+and an export that opens with the planner's layout (clock times coloured MV/KV/NV, hours and
+wishes on the right, COUNTIF count rows with the staffing notes) plus a wishes sheet. Generate,
+Repair and Export stay separate buttons. Count rows re-import only after Excel has saved the
+file (the formulas carry no values until then).
+
 ## Open questions
 
 1. Is the period always the 15th to the 14th?
