@@ -1,6 +1,6 @@
-import type { ShiftType } from './types'
+import type { ShiftKind, ShiftType } from './types'
 
-export type ShiftKind = 'morning' | 'evening' | 'night'
+export type { ShiftKind }
 
 const COLORS: Record<ShiftKind, { bg: string; fg: string }> = {
   morning: { bg: '#f6e6a6', fg: '#4a3b00' },

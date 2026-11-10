@@ -13,13 +13,16 @@ interface Props {
   setProject: (p: Project) => void
   roster: Assignment[]
   setRoster: (r: Assignment[]) => void
+  openPerson: (staffId: string) => void
 }
 
-export function SetupView({ project: p, setProject, roster, setRoster }: Props) {
+export function SetupView({ project: p, setProject, roster, setRoster, openPerson }: Props) {
   const i = useI18n()
   const { t } = i
   const [query, setQuery] = useState('')
   const set = (patch: Partial<Project>) => setProject({ ...p, ...patch })
+  const ruleCount = new Map<string, number>()
+  for (const r of p.custom_rules) if ('staff_id' in r) ruleCount.set(r.staff_id, (ruleCount.get(r.staff_id) ?? 0) + 1)
   const groupOptions = p.groups.map((g) => ({ value: g.id, label: g.name }))
   const shiftOptions = p.shift_types.map((s) => ({ value: s.id, label: s.code }))
   const dates = periodDates(p.period.start, Math.max(1, p.period.days))
@@ -359,7 +362,7 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                           <span className="muted">%</span>
                         </span>
                       </td>
-                      <td>
+                      <td className="shift-pills">
                         <Checks values={s.allowed_shift_ids ?? []} options={shiftOptions} onChange={(ids) => set({ staff: patchAt(p.staff, idx, { allowed_shift_ids: ids.length ? ids : null }) })} />
                       </td>
                       {p.competences.length > 0 && (
@@ -375,13 +378,10 @@ export function SetupView({ project: p, setProject, roster, setRoster }: Props) 
                         <NumberField width={80} nullable placeholder={t('Auto')} value={s.target_hours_override} onChange={(v) => set({ staff: patchAt(p.staff, idx, { target_hours_override: v }) })} />
                       </td>
                       <td className="wish">
-                        <textarea
-                          aria-label={t('{name}: wishes', { name: s.name })}
-                          placeholder={t('e.g. every other weekend, no evenings')}
-                          title={s.note}
-                          value={s.note}
-                          onChange={(e) => set({ staff: patchAt(p.staff, idx, { note: e.target.value }) })}
-                        />
+                        <button type="button" className="wish-btn" aria-label={t('{name}: wishes', { name: s.name })} title={s.note} onClick={() => openPerson(s.id)}>
+                          <span className={s.note ? 'text' : 'text muted'}>{s.note || t('Add wishes…')}</span>
+                          {ruleCount.get(s.id) ? <span className="chip">{i.tn(ruleCount.get(s.id)!, '{n} rule', '{n} rules')}</span> : null}
+                        </button>
                       </td>
                       <td className="right">
                         <RemoveButton label={t('Remove {name}', { name: s.name })} onClick={() => removePerson(idx)} />

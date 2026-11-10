@@ -10,7 +10,7 @@ export interface ShiftType {
   end: string
   break_minutes: number
   is_night: boolean
-  category: 'morning' | 'evening' | 'night' | null
+  category: ShiftKind | null
 }
 
 export interface StaffGroup {
@@ -169,7 +169,28 @@ export type CustomRule =
   | (RuleBase & { type: 'max_shift_type'; group_id: string; shift_id: string; max_count: number })
   | (RuleBase & { type: 'forbid_sequence'; group_id: string | null; from_shift_id: string; to_shift_id: string })
   | (RuleBase & { type: 'fixed_area'; staff_id: string; area_id: string })
-  | (RuleBase & { type: 'diverse_shifts'; staff_id: string; shift_ids: string[] | null })
+  | (RuleBase & { type: 'diverse_shifts'; staff_id: string; shift_ids: string[] | null; by_kind?: boolean; kinds?: ShiftKind[] | null })
+  | (RuleBase & { type: 'weekend_pattern'; staff_id: string; every: number; both_days: boolean })
+  | (RuleBase & ShiftFilter & { type: 'allowed_shifts'; staff_id: string; weekdays: number[] })
+  | (RuleBase & ShiftFilter & { type: 'recurring_shift'; staff_id: string; weekdays: number[] })
+  | (RuleBase & { type: 'unavailable_weekdays'; staff_id: string; weekdays: number[] })
+  | (RuleBase & ShiftFilter & { type: 'shifts_per_week'; staff_id: string; weekdays: number[]; min: number | null; max: number | null })
+  | (RuleBase & ShiftFilter & { type: 'work_together'; staff_id: string; other_staff_id: string })
+
+export type ShiftKind = 'morning' | 'evening' | 'night'
+
+/** Which shifts a person rule is about; both null = any shift. */
+export interface ShiftFilter {
+  kinds: ShiftKind[] | null
+  shift_ids: string[] | null
+}
+
+/** A rule read from a person's wish note, for the planner to accept. */
+export interface WishSuggestion {
+  staff_id: string
+  text: string
+  rule: CustomRule
+}
 
 export interface LedgerEntry {
   staff_id: string
@@ -301,5 +322,6 @@ export interface WorkbookImport {
   shifts_imported: number
   shift_types: number
   staffing: StaffingRead[]
+  wishes: WishSuggestion[]
   warnings: string[]
 }

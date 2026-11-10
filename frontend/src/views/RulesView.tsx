@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { AGREEMENTS } from '../agreements'
-import { Checks, NumberField, PageHead, RemoveButton, Section, Select, TextField } from '../components/fields'
+import { NumberField, PageHead, RemoveButton, Section, Select, TextField } from '../components/fields'
+import { RuleCard } from '../components/RuleCard'
+import { blankRule, describeRule, isPersonRule, UNIT_RULE_TYPES } from '../rules'
 import { useI18n } from '../i18n'
 import { patchAt, removeAt } from '../lists'
 import { newId } from '../store'
@@ -9,6 +11,7 @@ import type { Agreement, CustomRule, LaborRules, Project, Weights } from '../typ
 interface Props {
   project: Project
   setProject: (p: Project) => void
+  openPerson: (staffId: string) => void
 }
 
 type NumKey = { [K in keyof LaborRules]: LaborRules[K] extends number | null ? K : never }[keyof LaborRules]
@@ -95,37 +98,7 @@ const AGREEMENT_FACTS: Record<Agreement, string[]> = {
   custom: ['Your own settings below'],
 }
 
-const RULE_TYPES: { value: CustomRule['type']; label: string }[] = [
-  { value: 'avoid_task_repeat', label: 'Don’t repeat a task too often' },
-  { value: 'rotate_task_evenly', label: 'Rotate a task evenly' },
-  { value: 'max_shift_type', label: 'Limit a shift type per person' },
-  { value: 'forbid_sequence', label: 'Forbid shift A followed by B' },
-  { value: 'fixed_area', label: 'Keep a person in one area' },
-  { value: 'diverse_shifts', label: 'Give a person a varied shift mix' },
-]
-
-function blankRule(type: CustomRule['type'], p: Project, id: string): CustomRule {
-  const base = { id, enabled: true, hard: false, weight: 10, description: '' }
-  const group_id = p.groups[0]?.id ?? ''
-  const task_id = p.tasks[0]?.id ?? ''
-  const shift_id = p.shift_types[0]?.id ?? ''
-  switch (type) {
-    case 'avoid_task_repeat':
-      return { ...base, type, group_id, task_id, max_count: 1, window_days: 3 }
-    case 'rotate_task_evenly':
-      return { ...base, type, group_id, task_id, proportional_to_employment: true }
-    case 'max_shift_type':
-      return { ...base, type, group_id, shift_id, max_count: 8 }
-    case 'forbid_sequence':
-      return { ...base, type, group_id: null, from_shift_id: shift_id, to_shift_id: shift_id }
-    case 'fixed_area':
-      return { ...base, type, hard: true, staff_id: p.staff[0]?.id ?? '', area_id: p.areas[0]?.id ?? '' }
-    case 'diverse_shifts':
-      return { ...base, type, staff_id: p.staff[0]?.id ?? '', shift_ids: null }
-  }
-}
-
-export function RulesView({ project: p, setProject }: Props) {
+export function RulesView({ project: p, setProject, openPerson }: Props) {
   const i = useI18n()
   const { t } = i
   const [newType, setNewType] = useState<CustomRule['type']>('avoid_task_repeat')
@@ -134,12 +107,9 @@ export function RulesView({ project: p, setProject }: Props) {
   const setRules = (patch: Partial<LaborRules>) => set({ rules: { ...p.rules, agreement: 'custom', ...patch } })
   const setRule = (idx: number, patch: Partial<CustomRule>) => set({ custom_rules: patchAt(p.custom_rules, idx, patch as CustomRule) })
 
-  const groups = p.groups.map((g) => ({ value: g.id, label: g.name }))
-  const tasks = p.tasks.map((x) => ({ value: x.id, label: x.name }))
-  const shifts = p.shift_types.map((s) => ({ value: s.id, label: `${s.code} · ${s.name}` }))
-  const shiftCodes = p.shift_types.map((s) => ({ value: s.id, label: s.code }))
-  const people = p.staff.map((s) => ({ value: s.id, label: s.name }))
-  const areas = p.areas.map((a) => ({ value: a.id, label: a.name }))
+  const wishPeople = p.staff
+    .map((person) => ({ person, rules: p.custom_rules.filter((r) => isPersonRule(r) && r.staff_id === person.id) }))
+    .filter((x) => x.rules.length)
   const maxWeight = Math.max(...WEIGHT_FIELDS.map((f) => p.weights[f.key]), 1)
   const strength = (v: number) =>
     `${v >= 100 ? t('Avoid at almost any cost') : v >= 30 ? t('Strongly avoid') : v >= 8 ? t('Avoid') : t('Mild preference')} · ${t('{n} pts', { n: v })}`
@@ -324,7 +294,7 @@ export function RulesView({ project: p, setProject }: Props) {
           <span className="row">
             <label className="field inline">
               <span className="sr-only">{t('Rule type to add')}</span>
-              <Select value={newType} options={RULE_TYPES.map((r) => ({ value: r.value, label: t(r.label) }))} onChange={setNewType} />
+              <Select value={newType} options={UNIT_RULE_TYPES.map((r) => ({ value: r.value, label: t(r.label) }))} onChange={setNewType} />
             </label>
             <button className="btn primary" onClick={() => set({ custom_rules: [...p.custom_rules, blankRule(newType, p, newId('rule', p.custom_rules))] })}>
               {t('Add rule')}
@@ -333,85 +303,39 @@ export function RulesView({ project: p, setProject }: Props) {
         }
       >
         <div className="card-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))' }}>
-          {p.custom_rules.map((r, idx) => (
-            <article key={r.id} className={`rule-card ${r.enabled ? '' : 'disabled'}`}>
-              <div className="row">
-                <span className="chip">{t(RULE_TYPES.find((x) => x.value === r.type)?.label ?? r.type)}</span>
-                <span className="spacer" />
-                <label className="row small">
-                  <input type="checkbox" checked={r.enabled} onChange={(e) => setRule(idx, { enabled: e.target.checked })} />
-                  {t('On')}
-                </label>
-                <RemoveButton label={t('Remove rule')} onClick={() => set({ custom_rules: removeAt(p.custom_rules, idx) })} />
-              </div>
-              <input className="desc" placeholder={t('Describe the rule…')} aria-label={t('Description')} value={r.description} onChange={(e) => setRule(idx, { description: e.target.value })} />
-              <div className="params">
-                {r.type === 'forbid_sequence' && (
-                  <>
-                    <Select value={r.group_id ?? ''} options={[{ value: '', label: t('Everyone') }, ...groups]} onChange={(v) => setRule(idx, { group_id: v || null })} />
-                    <Select value={r.from_shift_id} options={shifts} onChange={(from_shift_id) => setRule(idx, { from_shift_id })} />
-                    {t('never followed next day by')}
-                    <Select value={r.to_shift_id} options={shifts} onChange={(to_shift_id) => setRule(idx, { to_shift_id })} />
-                  </>
-                )}
-                {r.type === 'fixed_area' && (
-                  <>
-                    <Select value={r.staff_id} options={people} onChange={(staff_id) => setRule(idx, { staff_id })} /> {t('always in')}
-                    <Select value={r.area_id} options={areas} onChange={(area_id) => setRule(idx, { area_id })} />
-                  </>
-                )}
-                {r.type === 'diverse_shifts' && (
-                  <>
-                    <Select value={r.staff_id} options={people} onChange={(staff_id) => setRule(idx, { staff_id })} /> {t('balanced across')}
-                    <Checks values={r.shift_ids ?? []} options={shiftCodes} onChange={(ids) => setRule(idx, { shift_ids: ids.length ? ids : null })} />
-                    <span className="muted">{t('(none = all they may work)')}</span>
-                  </>
-                )}
-                {(r.type === 'avoid_task_repeat' || r.type === 'rotate_task_evenly' || r.type === 'max_shift_type') && (
-                  <Select value={r.group_id} options={groups} onChange={(group_id) => setRule(idx, { group_id })} />
-                )}
-                {r.type === 'avoid_task_repeat' && (
-                  <>
-                    <Select value={r.task_id} options={tasks} onChange={(task_id) => setRule(idx, { task_id })} /> {t('at most')}
-                    <NumberField width={60} value={r.max_count} onChange={(v) => setRule(idx, { max_count: v ?? 1 })} /> {t('times in')}
-                    <NumberField width={60} value={r.window_days} onChange={(v) => setRule(idx, { window_days: v ?? 1 })} /> {t('days')}
-                  </>
-                )}
-                {r.type === 'rotate_task_evenly' && (
-                  <>
-                    <Select value={r.task_id} options={tasks} onChange={(task_id) => setRule(idx, { task_id })} />
-                    <label className="row">
-                      <input type="checkbox" checked={r.proportional_to_employment} onChange={(e) => setRule(idx, { proportional_to_employment: e.target.checked })} />
-                      {t('by employment %')}
-                    </label>
-                  </>
-                )}
-                {r.type === 'max_shift_type' && (
-                  <>
-                    <Select value={r.shift_id} options={shifts} onChange={(shift_id) => setRule(idx, { shift_id })} /> {t('at most')}
-                    <NumberField width={60} value={r.max_count} onChange={(v) => setRule(idx, { max_count: v ?? 0 })} /> {t('per period')}
-                  </>
-                )}
-              </div>
-              <div className="foot">
-                <div className="segmented" role="radiogroup" aria-label={t('Hard or soft')}>
-                  <button role="radio" aria-checked={r.hard} onClick={() => setRule(idx, { hard: true })}>
-                    {t('Hard')}
-                  </button>
-                  <button role="radio" aria-checked={!r.hard} onClick={() => setRule(idx, { hard: false })}>
-                    {t('Soft')}
-                  </button>
-                </div>
-                {!r.hard && (
-                  <label className="row">
-                    <NumberField width={70} value={r.weight} onChange={(v) => setRule(idx, { weight: v ?? 1 })} />
-                    <span className="muted">{t('points')}</span>
-                  </label>
-                )}
-              </div>
-            </article>
-          ))}
+          {p.custom_rules.map((r, idx) =>
+            isPersonRule(r) ? null : (
+              <RuleCard key={r.id} rule={r} project={p} onChange={(patch) => setRule(idx, patch)} onRemove={() => set({ custom_rules: removeAt(p.custom_rules, idx) })} />
+            ),
+          )}
         </div>
+      </Section>
+
+      <Section
+        title={t('Wishes and rules per person')}
+        hint={t('Weekends, shift kinds, set weekdays, hallways and so on. Open a person to change theirs.')}
+        count={wishPeople.length}
+      >
+        {wishPeople.length === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>{t('No one has personal rules yet. Open a person under Setup, or import wishes from the Excel sheet.')}</p>
+        ) : (
+          <ul className="list person-rules">
+            {wishPeople.map(({ person, rules }) => (
+              <li key={person.id}>
+                <button type="button" className="link" onClick={() => openPerson(person.id)}>
+                  {person.name}
+                </button>
+                <span className="row" style={{ gap: 4, flex: '1 1 300px' }}>
+                  {rules.map((r) => (
+                    <span key={r.id} className={`chip ${r.hard ? 'hard' : ''} ${r.enabled ? '' : 'off'}`}>
+                      {describeRule(i, p, r)}
+                    </span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
     </>
   )

@@ -5,6 +5,7 @@ import { I18nContext, makeI18n, type Lang } from './i18n'
 import { download, usePersisted } from './store'
 import type { Assignment, Change, Evaluation, Project, SolveResult } from './types'
 import { DemandView } from './views/DemandView'
+import { PersonPanel } from './views/PersonPanel'
 import { LeaveView } from './views/LeaveView'
 import { RosterView } from './views/RosterView'
 import { RulesView } from './views/RulesView'
@@ -59,6 +60,8 @@ export default function App() {
   const [busy, setBusy] = useState<RunMode | null>(null)
   const [changes, setChanges] = useState<Change[] | null>(null)
   // "Now" for repair: earlier days are history, and notice (change fee) counts from here.
+  const [personId, setPersonId] = useState<string | null>(null)
+  const closePerson = useCallback(() => setPersonId(null), [])
   const [asOf, setAsOf] = useState(() => new Date().toISOString().slice(0, 10))
 
   /** Every roster change goes through here so it can be undone. */
@@ -220,13 +223,15 @@ export default function App() {
                 setChanges(null)
               }}
               onNextPeriod={startNextPeriod}
+              openPerson={setPersonId}
             />
           )}
-          {tab === 'Setup' && <SetupView project={project} setProject={setProject} roster={roster} setRoster={setRoster} />}
+          {tab === 'Setup' && <SetupView project={project} setProject={setProject} roster={roster} setRoster={setRoster} openPerson={setPersonId} />}
           {tab === 'Demand' && <DemandView project={project} setProject={setProject} />}
           {tab === 'Leave' && <LeaveView project={project} setProject={setProject} />}
-          {tab === 'Rules' && <RulesView project={project} setProject={setProject} />}
+          {tab === 'Rules' && <RulesView project={project} setProject={setProject} openPerson={setPersonId} />}
         </main>
+        {personId && <PersonPanel project={project} setProject={setProject} evaluation={evaluation} staffId={personId} onClose={closePerson} />}
       </div>
     </I18nContext.Provider>
   )

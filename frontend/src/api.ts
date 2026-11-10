@@ -1,4 +1,4 @@
-import type { Agreement, Assignment, Evaluation, ImportResult, Project, PublicHoliday, SolveResult, WorkbookImport } from './types'
+import type { Agreement, Assignment, Evaluation, ImportResult, Project, PublicHoliday, SolveResult, WishSuggestion, WorkbookImport } from './types'
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/${path}`, {
@@ -64,5 +64,6 @@ export const api = {
   repair: (project: Project, roster: Assignment[], today: string, mode: 'repair' | 'regenerate' = 'repair') =>
     call<SolveResult>(`repair?${q()}`, { project, roster, today, mode }),
   nextPeriod: (project: Project, roster: Assignment[]) => call<Project>('next-period', { project, roster }),
+  suggestWishes: (project: Project) => call<WishSuggestion[]>('wishes/suggest', project),
   validate: (project: Project, roster: Assignment[]) => call<Evaluation>(`validate?${q()}`, { project, roster }),
 }

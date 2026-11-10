@@ -28,6 +28,7 @@ interface Props {
   onLoadDemo: () => void
   onNextPeriod: () => void
   onReplaceUnit: (project: Project, roster: Assignment[]) => void
+  openPerson: (staffId: string) => void
 }
 
 type Selection = { kind: 'person'; staffId: string; date: ISODate } | { kind: 'cov'; row: string; date: ISODate } | null
@@ -408,8 +409,9 @@ export function RosterView(props: Props) {
       {workbook && (
         <WorkbookCard
           result={workbook}
-          onUse={() => {
-            props.onReplaceUnit(workbook.project, workbook.roster)
+          onUse={(withWishes) => {
+            const wishes = withWishes ? workbook.wishes.map((w, k) => ({ ...w.rule, id: `wish${k + 1}` })) : []
+            props.onReplaceUnit({ ...workbook.project, custom_rules: [...workbook.project.custom_rules, ...wishes] }, workbook.roster)
             setWorkbook(null)
           }}
           onClose={() => setWorkbook(null)}
@@ -584,7 +586,9 @@ export function RosterView(props: Props) {
                               className="name"
                               title={[groupName.get(s.group_ids[0]), ...s.competence_ids.map((c) => project.competences.find((x) => x.id === c)?.name)].filter(Boolean).join(' · ')}
                             >
-                              {s.name}
+                              <button type="button" className="name-btn" onClick={() => props.openPerson(s.id)}>
+                                {s.name}
+                              </button>
                               <span className="pct">{s.employment_percent}%</span>
                             </th>
                             {pastDates.map((d, idx) => {
@@ -1276,8 +1280,10 @@ function abbreviate(name: string): string {
 }
 
 /** What a planner's workbook became, before it replaces the current unit. */
-function WorkbookCard({ result, onUse, onClose }: { result: WorkbookImport; onUse: () => void; onClose: () => void }) {
+function WorkbookCard({ result, onUse, onClose }: { result: WorkbookImport; onUse: (withWishes: boolean) => void; onClose: () => void }) {
   const i = useI18n()
+  const [withWishes, setWithWishes] = useState(true)
+  const wishPeople = new Set(result.wishes.map((w) => w.staff_id)).size
   const { t } = i
   const p = result.project
   const last = periodDates(p.period.start, p.period.days).at(-1)!
@@ -1338,6 +1344,17 @@ function WorkbookCard({ result, onUse, onClose }: { result: WorkbookImport; onUs
           ))}
         </ul>
       </div>
+      {result.wishes.length > 0 && (
+        <div>
+          <label className="row">
+            <input type="checkbox" checked={withWishes} onChange={(e) => setWithWishes(e.target.checked)} />
+            <b>{i.tn(result.wishes.length, 'Add {n} rule read from the wishes', 'Add {n} rules read from the wishes')}</b>
+          </label>
+          <p className="hint" style={{ margin: '2px 0 0 24px' }}>
+            {t('{people} people. All are soft: the solver follows them when it can. Check each person under Setup.', { people: wishPeople })}
+          </p>
+        </div>
+      )}
       {result.warnings.length > 0 && (
         <details>
           <summary className="muted">{i.tn(result.warnings.length, '{n} note on the import', '{n} notes on the import')}</summary>
@@ -1349,7 +1366,7 @@ function WorkbookCard({ result, onUse, onClose }: { result: WorkbookImport; onUs
         </details>
       )}
       <div className="row">
-        <button className="btn primary" onClick={onUse}>
+        <button className="btn primary" onClick={() => onUse(withWishes)}>
           {t('Use this unit')}
         </button>
         <button className="btn" onClick={onClose}>
