@@ -397,3 +397,7 @@ button.link { font-weight: 600; min-width: 160px; }
 .shift-pills { min-width: 340px; }
 .days-cell { min-width: 290px; }
 .days-cell .pills { flex-wrap: nowrap; }
+.wishes-report > li { flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 0; }
+.wishes-report button.link { min-width: 0; }
+.chip.missed { background: var(--warn-bg); color: var(--warn-ink); }
+.chip.met { background: var(--bg); color: var(--ink-3); }

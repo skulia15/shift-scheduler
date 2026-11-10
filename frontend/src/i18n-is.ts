@@ -653,4 +653,9 @@ export const IS: Record<string, string> = {
   'Each person on an only-when-short shift': 'Hver starfsmaður á vakt sem aðeins er notuð ef vantar',
   '{n} preferred': '{n} æskilegt',
   'Monthly: from day {day} to the day before it next month': 'Mánaðarlega: frá {day}. til dagsins á undan í næsta mánuði',
+  // Wishes report
+  'Show met': 'Sýna uppfylltar',
+  'Generate a roster to see which wishes it meets.': 'Búðu til vaktaplan til að sjá hvaða óskir það uppfyllir.',
+  '{met} of {n} met': '{met} af {n} uppfylltar',
+  'Day-off requests': 'Óskir um frí',
 }

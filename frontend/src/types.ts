@@ -289,10 +289,23 @@ export interface CoverageCell {
   preferred?: number | null
 }
 
+export interface WishResult {
+  staff_id: string
+  /** A person rule's id, or 'requests' for day-off requests. */
+  rule_id: string
+  description: string
+  hard: boolean
+  misses: number
+  /** Requests only: days asked for. */
+  total: number | null
+  examples: string[]
+}
+
 export interface Evaluation {
   violations: Violation[]
   staff: StaffStats[]
   coverage: CoverageCell[]
+  wishes?: WishResult[]
 }
 
 export interface SolveResult extends Evaluation {

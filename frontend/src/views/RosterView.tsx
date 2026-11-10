@@ -5,10 +5,11 @@ import { PageHead } from '../components/fields'
 import { AlertIcon, CheckIcon, CloseIcon, DotsIcon, ErrorDot, LockIcon, RefreshIcon, UndoIcon, WarnDot } from '../components/icons'
 import { periodDates, weekday } from '../dates'
 import { useI18n } from '../i18n'
+import { describeRule } from '../rules'
 import { holidayNote } from '../holidayNotes'
 import { KINDS, shiftColor, shiftKind } from '../shiftColors'
 import { download } from '../store'
-import type { Assignment, Change, CoverageCell, Evaluation, ImportResult, ISODate, LedgerEntry, Project, SolveResult, Violation, WorkbookImport } from '../types'
+import type { Assignment, Change, CoverageCell, Evaluation, ISODate, ImportResult, LedgerEntry, Project, SolveResult, Violation, WishResult, WorkbookImport } from '../types'
 import { ShiftDialog } from './ShiftDialog'
 
 interface Props {
@@ -224,6 +225,7 @@ export function RosterView(props: Props) {
 
   // ------------------------------------------------------------ derived status
   const errors = violations.filter((v) => v.severity === 'error')
+  const hasWishes = (evaluation?.wishes?.length ?? 0) > 0
   const warnings = violations.filter((v) => v.severity === 'warning')
   const lockedCount = roster.filter((a) => a.locked).length
   const lockedConflicts = errors.filter((v) => v.staff_id && v.date && cell.get(`${v.staff_id}|${v.date}`)?.locked && !v.rule.includes('coverage'))
@@ -750,6 +752,7 @@ export function RosterView(props: Props) {
             onEdit={(staffId, date) => setEditing({ staffId, date })}
             onSet={(staffId, date, a) => setCell(staffId, date, a)}
           />
+          {hasWishes && <WishesPanel project={project} wishes={evaluation?.wishes ?? []} hasRoster={roster.length > 0} openPerson={props.openPerson} />}
           <ProblemsPanel
             project={project}
             violations={violations}
@@ -1018,6 +1021,70 @@ const RULE_TITLES: Record<string, string> = {
   shift_length: 'Shift length',
   lone_night: 'Alone on a night',
   unknown_reference: 'Unknown item',
+}
+
+/** Which wishes the roster meets: a count, and the people with wishes it misses. */
+function WishesPanel({ project, wishes, hasRoster, openPerson }: { project: Project; wishes: WishResult[]; hasRoster: boolean; openPerson: (staffId: string) => void }) {
+  const i = useI18n()
+  const { t } = i
+  const [all, setAll] = useState(false)
+  const met = wishes.filter((w) => !w.misses).length
+  const byPerson = new Map<string, WishResult[]>()
+  for (const w of wishes) byPerson.set(w.staff_id, [...(byPerson.get(w.staff_id) ?? []), w])
+  const people = project.staff
+    .map((s) => ({ s, list: byPerson.get(s.id) ?? [] }))
+    .filter(({ list }) => list.length && (all || list.some((w) => w.misses)))
+    .sort((a, b) => b.list.reduce((n, w) => n + w.misses, 0) - a.list.reduce((n, w) => n + w.misses, 0))
+  const pct = wishes.length ? Math.round((met / wishes.length) * 100) : 100
+  const rules = new Map(project.custom_rules.map((r) => [r.id, r]))
+  // What the rule does ("Only MV/KV"), not the wish text it came from: one wish can give two rules.
+  const label = (w: WishResult) => {
+    const r = rules.get(w.rule_id)
+    return r ? describeRule(i, project, r) : w.description
+  }
+  return (
+    <section className="side-card">
+      <div className="row">
+        <h2 style={{ flex: '1 1 0' }}>{t('Wishes')}</h2>
+        <label className="row small">
+          <input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} />
+          {t('Show met')}
+        </label>
+      </div>
+      {!hasRoster ? (
+        <p className="muted small" style={{ margin: 0 }}>{t('Generate a roster to see which wishes it meets.')}</p>
+      ) : (
+        <>
+          <div>
+            <b>{t('{met} of {n} met', { met, n: wishes.length })}</b>
+            <span className="bar thick" style={{ display: 'block', marginTop: 6 }}>
+              <span style={{ width: `${pct}%` }} />
+            </span>
+          </div>
+          <ul className="list wishes-report">
+            {people.slice(0, all ? undefined : 12).map(({ s, list }) => (
+              <li key={s.id}>
+                <button type="button" className="link" onClick={() => openPerson(s.id)}>
+                  {s.name}
+                </button>
+                <span className="row" style={{ gap: 4 }}>
+                  {list
+                    .filter((w) => all || w.misses)
+                    .map((w) => (
+                      <span key={w.rule_id} className={`chip ${w.misses ? 'missed' : 'met'}`} title={[w.description, ...w.examples].join('\n')}>
+                        {w.misses ? '✗' : '✓'} {w.rule_id === 'requests' ? t('Day-off requests') : label(w)}
+                        {w.misses ? ` · ${w.total ? t('{n} of {m}', { n: w.misses, m: w.total }) : `${w.misses}×`}` : ''}
+                      </span>
+                    ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {!all && people.length > 12 && <p className="muted small" style={{ margin: 0 }}>{t('and {n} more', { n: people.length - 12 })}</p>}
+        </>
+      )}
+    </section>
+  )
 }
 
 function ProblemsPanel({
