@@ -101,7 +101,7 @@ def test_export_starts_with_the_planners_layout_and_reads_back():
     roster = solve(p).roster
     data = export_roster(p, roster)
     ws = load_workbook(io.BytesIO(data)).worksheets[0]
-    assert ws.title == "Vaktaskýrsla" and ws["A3"].value == "S0"
+    assert ws.title == "Vaktaskýrsla" and ws["A2"].value == "S0"
     assert any(str(c.value).startswith("=COUNTIF(") for row in ws.iter_rows() for c in row)
     back = import_workbook(data)
     assert back.people == 6 and back.shifts_imported == len(roster)

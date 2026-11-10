@@ -35,6 +35,7 @@ class ShiftType(BaseModel):
     category: ShiftKind | None = Field(
         None, description="MV / KV / NV; None = from the start time (night if is_night)"
     )
+    text_color: str | None = Field(None, description="Hex text colour in exported sheets, e.g. the planner's red for part shifts")
 
     @property
     def kind(self) -> str:

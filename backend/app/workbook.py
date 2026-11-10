@@ -104,18 +104,29 @@ class _Sheet:
     title: str
     values: list[list[object]]
     fills: list[list[str | None]]
+    fonts: list[list[str | None]]
 
 
 def _load(content: bytes) -> list[_Sheet]:
     wb = load_workbook(io.BytesIO(content), data_only=True)
     sheets = []
     for ws in wb.worksheets:
-        values, fills = [], []
+        values, fills, fonts = [], [], []
         for row in ws.iter_rows():
             values.append([c.value for c in row])
             fills.append([_fill(c) for c in row])
-        sheets.append(_Sheet(ws.title, values, fills))
+            fonts.append([_font(c) for c in row])
+        sheets.append(_Sheet(ws.title, values, fills, fonts))
     return sheets
+
+
+def _font(cell) -> str | None:
+    """A text colour other than black or automatic, as 6-digit hex."""
+    try:
+        rgb = cell.font.color.rgb if cell.font and cell.font.color is not None else None
+        return rgb[-6:] if isinstance(rgb, str) and rgb[-6:] not in ("000000", "FFFFFF") else None
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
 def _fill(cell) -> str | None:
@@ -326,6 +337,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
     # Clock times → shift types, grouped by the colour planners gave them, falling back to start time.
     time_count: Counter[tuple[str, str]] = Counter()
     time_colour: dict[tuple[str, str], Counter[str]] = defaultdict(Counter)
+    time_text: dict[tuple[str, str], Counter[str | None]] = defaultdict(Counter)
     for r in people_rows:
         for c in cols:
             if c >= len(values[r]):
@@ -333,6 +345,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
             tr = _time_range(values[r][c])
             if tr:
                 time_count[tr] += 1
+                time_text[tr][sheet.fonts[r][c] if c < len(sheet.fonts[r]) else None] += 1
                 if fills[r][c]:
                     time_colour[tr][fills[r][c]] += 1
     probe = {tr: ShiftType(id="x", code="x", name="x", start=tr[0], end=tr[1]).kind for tr in time_count}
@@ -345,6 +358,9 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         colour = time_colour[tr].most_common(1)[0][0] if time_colour[tr] else None
         kind_of[tr] = colour_kind[colour].most_common(1)[0][0] if colour else probe[tr]
     shift_types = _shift_types(time_count, kind_of, lang)
+    for s in shift_types:  # keep a clock time's text colour when most of its cells share it (red part shifts)
+        colour, n = time_text[(s.start, s.end)].most_common(1)[0]
+        s.text_color = colour if colour and n * 2 > time_count[(s.start, s.end)] else None
     shift_by_time = {(s.start, s.end): s.id for s in shift_types}
 
     # People.

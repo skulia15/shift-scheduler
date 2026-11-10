@@ -394,79 +394,105 @@ def export_roster(project: Project, roster: list[Assignment]) -> bytes:
 
 
 KIND_FILLS = {"morning": "94DCF8", "evening": "DAF2D0", "night": "F1A983"}
-LEAVE_TEXT = {"holiday": "Orlof", "sick": "Veik", "request": "Frí"}
+# The planner's sheet: weekends light yellow, Christmas/New Year (stórhátíðir) peach, holiday leave
+# grey, sick leave black, and a coloured full row between staff groups.
+WEEKEND_FILL, MAJOR_FILL = "FFFFCC", "FCE4D6"
+LEAVE_FILLS = {"holiday": "A6A6A6", "sick": "000000"}
+GROUP_FILLS = ["C00000", "7030A0", "ED7D31", "00B050", "0070C0"]
 
 
 def _clock_text(shift) -> str:
-    return f"{shift.start}-{shift.end}"
+    """'08:00-16:00'; midnight is written 00:00, as planners do."""
+    return f"{shift.start}-{'00:00' if shift.end == '24:00' else shift.end}"
 
 
 def _planner_sheet(wb: Workbook, project: Project, roster: list[Assignment], ev) -> None:
-    """The planner's layout as the first sheet: names, a column per day with clock times coloured by
-    morning / evening / night, hours and wishes on the right, and count rows (live formulas) below."""
+    """The planner's layout as the first sheet: a column per day with clock times coloured by
+    morning / evening / night, weekend and holiday columns shaded, leave as grey or black cells, a
+    coloured row between staff groups, hours and wishes on the right, and live count rows below."""
+    from openpyxl.styles import Border, Side
+
     ws = wb.create_sheet("Vaktaskýrsla", 0)
     dates = project.period.dates()
     n = len(dates)
     shift_by_id = {s.id: s for s in project.shift_types}
     cell = {(a.staff_id, a.date): a for a in roster}
     leave = {(lv.staff_id, d): lv for lv in project.leave if lv.kind != "request" or lv.granted for d in lv.days()}
+    major = {h.date for h in project.public_holidays if h.major}
     holidays = {h.date for h in project.public_holidays}
     stats = {s.staff_id: s for s in ev.staff}
     misses = Counter(w.staff_id for w in ev.wishes for _ in range(w.misses))
-    bold, thin = Font(bold=True), Font(size=9, color="5F6B6F")
-    center = Alignment(horizontal="center")
-    weekend_fill = PatternFill("solid", fgColor="EDEDED")
+    font, bold = Font(name="Verdana", size=9), Font(name="Verdana", size=9, bold=True)
+    side = Side(style="thin", color="BFBFBF")
+    border = Border(left=side, right=side, top=side, bottom=side)
+    fill = lambda hex_: PatternFill("solid", fgColor=hex_)  # noqa: E731
     first, last_day = 2, 1 + n  # day columns B..
     right = ["Hlutfall", "Vinnuskylda", "Unnið (vægi)", "Mismunur", "Næturvaktir", "Rauðir dagar", "Óskir", "Óskir ekki uppfylltar"]
 
-    ws.append(["Starfsmaður", *dates, *right])
-    ws.append(["", *[WEEKDAYS_IS[d.weekday()] for d in dates]])
-    for col in range(first, last_day + 1):
-        ws.cell(row=1, column=col).number_format = "d-mmm"
-        for r in (1, 2):
-            c = ws.cell(row=r, column=col)
-            c.alignment = center
-            if dates[col - first] in holidays or dates[col - first].weekday() >= 5:
-                c.fill = weekend_fill
-    for c in ws[1]:
-        c.font = bold
-    for c in ws[2]:
-        c.font = thin
+    def day_fill(d: date) -> str | None:
+        return MAJOR_FILL if d in major else WEEKEND_FILL if d in holidays or d.weekday() >= 5 else None
 
-    top = 3
-    for person in project.staff:
-        st = stats.get(person.id)
-        row: list[object] = [person.name]
-        for d in dates:
-            a = cell.get((person.id, d))
-            lv = leave.get((person.id, d))
-            row.append(_clock_text(shift_by_id[a.shift_id]) if a and a.shift_id in shift_by_id else LEAVE_TEXT[lv.kind] if lv else "")
-        row += [
-            person.employment_percent / 100,
-            st.target_hours if st else 0,
-            st.credited_hours if st else 0,
-            round(st.credited_hours - st.target_hours, 2) if st else 0,
-            st.night_shifts if st else 0,
-            st.holiday_shifts if st else 0,
-            person.note,
-            misses.get(person.id, 0) or "",
-        ]
-        ws.append(row)
-        r = ws.max_row
-        for j, d in enumerate(dates):
-            c = ws.cell(row=r, column=first + j)
-            c.alignment = center
-            a = cell.get((person.id, d))
-            if a and a.shift_id in shift_by_id:
-                c.fill = PatternFill("solid", fgColor=KIND_FILLS[shift_by_id[a.shift_id].kind])
-            elif (person.id, d) in leave:
-                c.font = Font(italic=True, color="5F6B6F")
-            elif d in holidays or d.weekday() >= 5:
-                c.fill = weekend_fill
-        ws.cell(row=r, column=last_day + 1).number_format = "0%"
-        diff = ws.cell(row=r, column=last_day + 4)
-        if isinstance(diff.value, float | int) and diff.value < -0.5:
-            diff.font = Font(color="9C0006")
+    ws.append(["Starfsmaður", *dates, *right])
+    for col in range(1, last_day + len(right) + 1):
+        c = ws.cell(row=1, column=col)
+        c.font, c.border = bold, border
+        if first <= col <= last_day:
+            c.number_format = "d-mmm"
+            if day_fill(dates[col - first]):
+                c.fill = fill(day_fill(dates[col - first]))
+
+    top = 2
+    groups = [g for g in project.groups if any(p.group_ids[:1] == [g.id] for p in project.staff)]
+    order = [(g, [p for p in project.staff if p.group_ids[:1] == [g.id]]) for g in groups]
+    order += [(None, [p for p in project.staff if not p.group_ids or p.group_ids[0] not in {g.id for g in groups}])]
+    for k, (group, people) in enumerate(order):
+        if not people:
+            continue
+        if k > 0 and len(groups) > 1:  # a coloured row between groups, as the planner draws them
+            ws.append([group.name if group else ""])
+            r = ws.max_row
+            for col in range(1, last_day + 1):
+                c = ws.cell(row=r, column=col)
+                c.fill = fill(GROUP_FILLS[(k - 1) % len(GROUP_FILLS)])
+                c.font = Font(name="Verdana", size=9, bold=True, color="FFFFFF")
+        for person in people:
+            st = stats.get(person.id)
+            row: list[object] = [person.name]
+            for d in dates:
+                a = cell.get((person.id, d))
+                row.append(_clock_text(shift_by_id[a.shift_id]) if a and a.shift_id in shift_by_id else None)
+            row += [
+                person.employment_percent / 100,
+                st.target_hours if st else 0,
+                st.credited_hours if st else 0,
+                round(st.credited_hours - st.target_hours, 2) if st else 0,
+                st.night_shifts if st else 0,
+                st.holiday_shifts if st else 0,
+                person.note,
+                misses.get(person.id, 0) or None,
+            ]
+            ws.append(row)
+            r = ws.max_row
+            for col in range(1, last_day + len(right) + 1):
+                c = ws.cell(row=r, column=col)
+                c.font, c.border = font, border
+            for j, d in enumerate(dates):
+                c = ws.cell(row=r, column=first + j)
+                a = cell.get((person.id, d))
+                lv = leave.get((person.id, d))
+                if a and a.shift_id in shift_by_id:
+                    s = shift_by_id[a.shift_id]
+                    c.fill = fill(KIND_FILLS[s.kind])
+                    if s.text_color:
+                        c.font = Font(name="Verdana", size=9, color=s.text_color)
+                elif lv and lv.kind in LEAVE_FILLS:
+                    c.fill = fill(LEAVE_FILLS[lv.kind])
+                elif day_fill(d):
+                    c.fill = fill(day_fill(d))
+            ws.cell(row=r, column=last_day + 1).number_format = "0%"
+            diff = ws.cell(row=r, column=last_day + 4)
+            if isinstance(diff.value, float | int) and diff.value < -0.5:
+                diff.font = Font(name="Verdana", size=9, color="9C0006")
     bottom = ws.max_row
 
     # Count rows: one per clock time with a staffing row, live COUNTIF so edits in Excel recount.
@@ -485,13 +511,15 @@ def _planner_sheet(wb: Workbook, project: Project, roster: list[Assignment], ev)
         for j in range(n):
             col = get_column_letter(first + j)
             c = ws.cell(row=r, column=first + j, value=f'=COUNTIF({col}{top}:{col}{bottom},"{text}")')
-            c.alignment = center
-        ws.cell(row=r, column=1).fill = PatternFill("solid", fgColor=KIND_FILLS[s.kind])
-        ws.cell(row=r, column=last_day + 7, value="; ".join(notes[sid]))
+            c.font, c.border = font, border
+        head = ws.cell(row=r, column=1)
+        head.fill, head.font, head.border = fill(KIND_FILLS[s.kind]), font, border
+        note = ws.cell(row=r, column=last_day + 7, value="; ".join(notes[sid]) or None)
+        note.font = font
 
-    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["A"].width = 22
     for j in range(n):
-        ws.column_dimensions[get_column_letter(first + j)].width = 12
+        ws.column_dimensions[get_column_letter(first + j)].width = 12.3
     for k, width in enumerate((9, 11, 12, 10, 11, 11, 50, 12)):
         ws.column_dimensions[get_column_letter(last_day + 1 + k)].width = width
     ws.freeze_panes = ws.cell(row=top, column=first)
