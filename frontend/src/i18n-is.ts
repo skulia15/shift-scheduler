@@ -638,4 +638,18 @@ export const IS: Record<string, string> = {
   '{n} rules': '{n} reglur',
   '{n} × {what} per week': '{n} × {what} á viku',
   '{people} people. All are soft: the solver follows them when it can. Check each person under Setup.': '{people} starfsmenn. Allar eru mjúkar: reiknivélin fylgir þeim þegar hún getur. Farðu yfir hvern og einn í grunnstillingum.',
+  // Staffing practice
+  'Preferred': 'Æskilegt',
+  'Soft: the solver adds people up to this when it can': 'Mjúkt: reiknivélin bætir við fólki upp að þessu þegar hún getur',
+  'Only when short': 'Aðeins ef vantar',
+  'Used only when short; each person on it costs points': 'Aðeins notuð þegar vantar; hver á henni kostar refsistig',
+  'Counts towards': 'Telst með',
+  'Counts for itself': 'Telst sér',
+  'Counts as {shift}': 'Telst sem {shift}',
+  'Shift A on a weekday brings shift B later': 'Vakt A á vikudegi leiðir af sér vakt B síðar',
+  'brings': 'leiðir af sér',
+  'days later': 'dögum síðar',
+  'Each person below a preferred headcount': 'Hver starfsmaður undir æskilegri mönnun',
+  'Each person on an only-when-short shift': 'Hver starfsmaður á vakt sem aðeins er notuð ef vantar',
+  '{n} preferred': '{n} æskilegt',
 }

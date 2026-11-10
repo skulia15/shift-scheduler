@@ -87,6 +87,8 @@ const WEIGHT_FIELDS: { key: keyof Weights; label: string }[] = [
   { key: 'overtime_spread', label: 'Each hour of the biggest overtime' },
   { key: 'under_hours', label: 'Each hour below contract' },
   { key: 'overstaff', label: 'Each extra person above minimum' },
+  { key: 'preferred_shortfall', label: 'Each person below a preferred headcount' },
+  { key: 'fallback_use', label: 'Each person on an only-when-short shift' },
   { key: 'change_detail', label: 'Repair: hallway or task changed' },
 ]
 

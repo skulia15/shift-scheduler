@@ -119,7 +119,7 @@ export function DemandView({ project: p, setProject }: Props) {
         }
       >
         <div className="table-scroll">
-          <table className="form-table" style={{ minWidth: 940 }}>
+          <table className="form-table" style={{ minWidth: 1180 }}>
             <thead>
               <tr>
                 <th>{t('Shift')}</th>
@@ -127,7 +127,9 @@ export function DemandView({ project: p, setProject }: Props) {
                 <th>{t('Applies on')}</th>
                 <th>{t('Specific dates')}</th>
                 <th>{t('At least')}</th>
+                <th title={t('Soft: the solver adds people up to this when it can')}>{t('Preferred')}</th>
                 <th>{t('At most')}</th>
+                <th title={t('Used only when short; each person on it costs points')}>{t('Only when short')}</th>
                 <th />
               </tr>
             </thead>
@@ -160,7 +162,28 @@ export function DemandView({ project: p, setProject }: Props) {
                       <NumberField value={c.min} onChange={(v) => patch({ min: v ?? 0 })} />
                     </td>
                     <td>
+                      <NumberField nullable placeholder="—" value={c.preferred ?? null} onChange={(preferred) => patch({ preferred })} />
+                    </td>
+                    <td>
                       <NumberField nullable placeholder={t('Any')} value={c.max} onChange={(max) => patch({ max })} />
+                    </td>
+                    <td>
+                      <span className="row" style={{ flexWrap: 'nowrap' }}>
+                        <input
+                          type="checkbox"
+                          aria-label={t('Only when short')}
+                          checked={!!c.fallback}
+                          onChange={(e) => patch({ fallback: e.target.checked, covers_shift_id: e.target.checked ? c.covers_shift_id ?? null : null })}
+                        />
+                        {c.fallback && (
+                          <Options
+                            label={t('Counts towards')}
+                            value={c.covers_shift_id ?? ''}
+                            items={[{ id: '', label: t('Counts for itself') }, ...shifts.filter((s) => s.id !== c.shift_id).map((s) => ({ ...s, label: t('Counts as {shift}', { shift: s.label }) }))]}
+                            onChange={(v) => patch({ covers_shift_id: v || null })}
+                          />
+                        )}
+                      </span>
                     </td>
                     <td className="right">
                       <RemoveButton label={t('Remove row')} onClick={() => set({ coverage: removeAt(p.coverage, idx) })} />

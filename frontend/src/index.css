@@ -243,6 +243,7 @@ table.roster { border-collapse: separate; border-spacing: 0; font-size: 12px; wi
 .roster tr.coverage td { padding: 2px; text-align: center; }
 .cov-cell { width: 36px; height: 26px; border-radius: 6px; border: 0; background: transparent; color: var(--ink-3); cursor: pointer; font-variant-numeric: tabular-nums; padding: 0; }
 .cov-cell.short { color: var(--error); font-weight: 700; background: var(--error-cell); }
+.cov-cell.below { color: var(--warn-ink); font-weight: 700; background: var(--warn-bg); }
 .cov-cell.selected { outline: 2.5px solid var(--ink); outline-offset: 1px; }
 .grid-help { margin: 0; color: var(--ink-3); font-size: 13px; }
 

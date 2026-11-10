@@ -7,6 +7,7 @@ export const UNIT_RULE_TYPES: { value: CustomRule['type']; label: string }[] = [
   { value: 'rotate_task_evenly', label: 'Rotate a task evenly' },
   { value: 'max_shift_type', label: 'Limit a shift type per person' },
   { value: 'forbid_sequence', label: 'Forbid shift A followed by B' },
+  { value: 'linked_shift', label: 'Shift A on a weekday brings shift B later' },
 ]
 
 /** Rules about one person: their wishes, hallway and shift mix. Edited on the person. */
@@ -46,6 +47,8 @@ export function blankRule(type: CustomRule['type'], p: Project, id: string, staf
       return { ...base, weight: 10, type, group_id, shift_id, max_count: 8 }
     case 'forbid_sequence':
       return { ...base, weight: 10, type, group_id: null, from_shift_id: shift_id, to_shift_id: shift_id }
+    case 'linked_shift':
+      return { ...base, weight: 40, type, group_id: null, from_shift_id: shift_id, weekdays: [5], to_shift_id: shift_id, days_after: 1 }
     case 'fixed_area':
       return { ...base, type, hard: true, staff_id, area_id: p.areas[0]?.id ?? '' }
     case 'diverse_shifts':

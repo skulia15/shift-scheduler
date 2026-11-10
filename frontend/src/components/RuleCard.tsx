@@ -64,6 +64,15 @@ export function RuleCard({ rule: r, project: p, onChange, onRemove, showStaff = 
             <Select value={r.to_shift_id} options={shifts} onChange={(to_shift_id) => set({ to_shift_id })} />
           </>
         )}
+        {r.type === 'linked_shift' && (
+          <>
+            <Select value={r.group_id ?? ''} options={[{ value: '', label: t('Everyone') }, ...groups]} onChange={(v) => set({ group_id: v || null })} />
+            <Select value={r.from_shift_id} options={shifts} onChange={(from_shift_id) => set({ from_shift_id })} /> {t('on')}
+            <Checks values={r.weekdays} options={weekdayOptions} onChange={(weekdays) => set({ weekdays })} /> {t('brings')}
+            <Select value={r.to_shift_id} options={shifts} onChange={(to_shift_id) => set({ to_shift_id })} />
+            <NumberField width={56} value={r.days_after} onChange={(v) => set({ days_after: Math.min(6, Math.max(1, v ?? 1)) })} /> {t('days later')}
+          </>
+        )}
         {r.type === 'fixed_area' && (
           <>
             {t('always in')}

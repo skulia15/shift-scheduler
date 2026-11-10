@@ -58,6 +58,12 @@ export interface CoverageDemand {
   dates: ISODate[] | null
   min: number
   max: number | null
+  /** Soft target above the minimum. */
+  preferred?: number | null
+  /** Only used when short; each person on it costs points. */
+  fallback?: boolean
+  /** A fallback's people also count towards this shift. */
+  covers_shift_id?: string | null
   note?: string
 }
 
@@ -153,6 +159,8 @@ export interface Weights {
   weekend_excess: number
   overstaff: number
   coverage_shortfall: number
+  preferred_shortfall: number
+  fallback_use: number
 }
 
 interface RuleBase {
@@ -176,6 +184,7 @@ export type CustomRule =
   | (RuleBase & { type: 'unavailable_weekdays'; staff_id: string; weekdays: number[] })
   | (RuleBase & ShiftFilter & { type: 'shifts_per_week'; staff_id: string; weekdays: number[]; min: number | null; max: number | null })
   | (RuleBase & ShiftFilter & { type: 'work_together'; staff_id: string; other_staff_id: string })
+  | (RuleBase & { type: 'linked_shift'; group_id: string | null; from_shift_id: string; weekdays: number[]; to_shift_id: string; days_after: number })
 
 export type ShiftKind = 'morning' | 'evening' | 'night'
 
@@ -277,6 +286,7 @@ export interface CoverageCell {
   competence_id: string | null
   required: number
   assigned: number
+  preferred?: number | null
 }
 
 export interface Evaluation {

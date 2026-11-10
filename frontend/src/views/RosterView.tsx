@@ -707,8 +707,9 @@ export function RosterView(props: Props) {
                                 type="button"
                                 id={`cc-${r.key}-${d}`}
                                 tabIndex={selected ? 0 : -1}
-                                className={`cov-cell ${x.assigned < x.required ? 'short' : ''} ${selected ? 'selected' : ''}`}
-                                aria-label={`${r.code} ${r.label}, ${i.day(d)}: ${t('{n} of {m}', { n: x.assigned, m: x.required })}`}
+                                className={`cov-cell ${x.assigned < x.required ? 'short' : x.preferred && x.assigned < x.preferred ? 'below' : ''} ${selected ? 'selected' : ''}`}
+                                aria-label={`${r.code} ${r.label}, ${i.day(d)}: ${t('{n} of {m}', { n: x.assigned, m: x.required })}${x.preferred ? `, ${t('{n} preferred', { n: x.preferred })}` : ''}`}
+                                title={x.preferred ? t('{n} preferred', { n: x.preferred }) : undefined}
                                 onClick={() => select({ kind: 'cov', row: r.key, date: d })}
                                 onKeyDown={(e) => {
                                   if (ARROWS[e.key]) {
