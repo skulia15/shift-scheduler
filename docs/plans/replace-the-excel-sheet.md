@@ -71,6 +71,12 @@ MV → KV → NV rotation, "one Friday a month", and pairs named in the text (na
 - "Fallback" shifts that are only used when short ("þarf ekki alltaf").
 - Linked shifts ("Saturday 17:30-00:00 gets Sunday 17:00-23:00").
 
+Done: preferred headcount (soft, 30 points per missing person), only-when-short rows that can
+count as the main shift of their kind (25 points per use, so they fill gaps only), and a linked-
+shift rule. The workbook import reads all three from the count-row notes. On the real sheet a
+generated roster has 0 errors; mornings miss the preferred 6 on 8 days and the 08:00-15:30
+fallback is used 15 times.
+
 ### Phase 4 — Quicker than Excel
 - The roster opens on the planner's real period (15th → 14th) with last period carried over.
 - One-click **Generate → Repair → Export** with a summary of which wishes were met.

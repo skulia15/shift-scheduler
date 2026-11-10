@@ -147,7 +147,7 @@ export function DemandView({ project: p, setProject }: Props) {
                     <td>
                       <Options label={t('Group')} value={c.group_id} items={groups} onChange={(group_id) => patch({ group_id })} />
                     </td>
-                    <td>
+                    <td className="days-cell">
                       {c.dates ? <span className="muted">{t('Only the dates listed')}</span> : <Checks values={c.weekdays} options={weekdayOptions} onChange={(weekdays) => patch({ weekdays })} />}
                       {c.note && (
                         <span className="muted small" style={{ display: 'block', marginTop: 4 }} title={t('Read from the planner’s sheet')}>

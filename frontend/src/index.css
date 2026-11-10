@@ -160,7 +160,7 @@ h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; colo
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* Shift badges and chips. */
-.badge { width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex: none; }
+.badge { white-space: nowrap;  width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex: none; }
 .badge.lg { width: 40px; height: 40px; border-radius: 10px; font-size: 16px; }
 .badge.xs { width: 20px; height: 18px; border-radius: 5px; font-size: 11px; }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; background: var(--chip); color: var(--ink-2); }
@@ -395,3 +395,5 @@ fieldset.limits legend { padding: 0 6px; font-weight: 700; color: var(--slate); 
 .name-btn:hover, .name-btn:focus-visible, button.link:hover, button.link:focus-visible { text-decoration: underline; color: var(--teal); }
 button.link { font-weight: 600; min-width: 160px; }
 .shift-pills { min-width: 340px; }
+.days-cell { min-width: 290px; }
+.days-cell .pills { flex-wrap: nowrap; }
