@@ -16,6 +16,7 @@ from .solver import repair, solve
 from .spreadsheet import ImportResult, export_roster, import_roster
 from .workbook import WorkbookImport, import_workbook
 from .validator import evaluate
+from .wishes import WishSuggestion, suggest_rules
 
 app = FastAPI(title="Shift Scheduler")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173"], allow_methods=["*"], allow_headers=["*"])
@@ -62,6 +63,12 @@ async def post_import_workbook(file: UploadFile = File(...), lang: Lang = "is") 
         return await run_in_threadpool(import_workbook, content, lang)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
+
+
+@app.post("/api/wishes/suggest")
+def post_suggest_wishes(project: Project) -> list[WishSuggestion]:
+    """Rules suggested from each person's wish note (not yet in the project)."""
+    return suggest_rules(project)
 
 
 @app.post("/api/export/roster.xlsx")

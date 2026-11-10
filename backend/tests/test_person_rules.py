@@ -103,3 +103,68 @@ def test_validator_is_quiet_when_wishes_are_met():
     ]
     roster = _on("s0", {0: "D", 5: "E", 6: "E", 7: "D"}) + _on("s1", {0: "D", 5: "E", 6: "E", 7: "D"})
     assert not [v for v in evaluate(small_project(custom_rules=rules), roster).violations if v.rule.startswith("x")]
+
+
+# Wish notes → suggested rules (synthetic notes in the planner's style).
+from app.models import FixedAreaRule  # noqa: E402
+from app.wishes import parse_wish  # noqa: E402
+from app.models import ShiftType  # noqa: E402
+
+UNIT_SHIFTS = [
+    ShiftType(id="M", code="M", name="M", start="08:00", end="16:00"),
+    ShiftType(id="M730", code="M730", name="M730", start="07:30", end="15:30"),
+    ShiftType(id="M-13", code="M-13", name="M-13", start="08:00", end="13:00"),
+    ShiftType(id="K", code="K", name="K", start="16:00", end="23:30"),
+    ShiftType(id="K17", code="K17", name="K17", start="17:00", end="23:00"),
+    ShiftType(id="K18", code="K18", name="K18", start="18:00", end="00:00"),
+    ShiftType(id="N", code="N", name="N", start="23:30", end="07:30", is_night=True),
+]
+
+
+def wish(note):
+    out = []
+    for _, r in parse_wish(note, "p", UNIT_SHIFTS, [("yellow", "Guli gangur")]):
+        d = r.model_dump(exclude={"id", "staff_id", "description", "enabled", "hard", "weight"}, exclude_none=True)
+        if d.get("weekdays") == list(range(7)):
+            d.pop("weekdays")
+        out.append(d)
+    return out
+
+
+@pytest.mark.parametrize(
+    "note,expected",
+    [
+        ("Önnur hver helgi", [{"type": "weekend_pattern", "every": 2, "both_days": False}]),
+        ("Engar helgar", [{"type": "weekend_pattern", "every": 0, "both_days": False}]),
+        ("Þriðju hverja helgi NV", [{"type": "weekend_pattern", "every": 3, "both_days": False}, {"type": "allowed_shifts", "kinds": ["night"], "weekdays": [5, 6]}]),
+        ("önnur hvor helgi 8-13", [{"type": "weekend_pattern", "every": 2, "both_days": False}, {"type": "allowed_shifts", "shift_ids": ["M-13"], "weekdays": [5, 6]}]),
+        ("Bara KV", [{"type": "allowed_shifts", "kinds": ["evening"]}]),
+        ("bara MV á virkum dögum", [{"type": "allowed_shifts", "kinds": ["morning"], "weekdays": [0, 1, 2, 3, 4]}]),
+        ("Ekki kvöldvaktir", [{"type": "allowed_shifts", "kinds": ["morning", "night"]}]),
+        ("Ekki vakt á þri og fös", [{"type": "unavailable_weekdays", "weekdays": [1, 4]}]),
+        ("Tvær MV í viku", [{"type": "shifts_per_week", "kinds": ["morning"], "min": 2, "max": 2}]),
+        ("ca 1 kvöldvakt í viku", [{"type": "shifts_per_week", "kinds": ["evening"], "max": 1}]),
+        ("Alla miðvikudaga 18-00", [{"type": "recurring_shift", "weekdays": [2], "shift_ids": ["K18"]}]),
+        ("KV á fimmtudögum", [{"type": "recurring_shift", "weekdays": [3], "kinds": ["evening"]}]),
+        ("alltaf 7.30-15.30", [{"type": "allowed_shifts", "shift_ids": ["M730", "K", "K17", "K18", "N"]}]),
+        ("kemst ekki kl. 16", [{"type": "allowed_shifts", "shift_ids": ["M", "M730", "M-13", "K17", "K18", "N"]}]),
+        ("Blandaðar vaktir MV og KV", [{"type": "diverse_shifts", "by_kind": True, "kinds": ["morning", "evening"]}, {"type": "allowed_shifts", "kinds": ["morning", "evening"]}]),
+        ("Alltaf á gula ganginum", [{"type": "fixed_area", "area_id": "yellow"}]),
+        ("Stundum KV á mánudögum", []),
+        ("Einn föstudag í mánuði", []),
+    ],
+)
+def test_wish_notes_become_rule_suggestions(note, expected):
+    assert wish(note) == expected
+
+
+def test_suggested_rules_solve_and_are_soft():
+    project = small_project()
+    project.staff[0].note = "Önnur hver helgi. Ekki vakt á miðvikudögum, Tvær MV í viku"
+    from app.wishes import suggest_rules
+
+    found = suggest_rules(project)
+    assert found and all(not s.rule.hard for s in found)
+    project.custom_rules = [s.rule for s in found]
+    assert not errors(solve(project))
+    assert suggest_rules(project) == []  # already accepted

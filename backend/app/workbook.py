@@ -20,10 +20,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
 from openpyxl import load_workbook
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .holidays import holidays_between
 from .models import Assignment, CoverageDemand, Period, Project, ShiftType, Staff, StaffGroup
+from .wishes import WishSuggestion, suggest_rules
 
 TIME_RANGE = re.compile(r"^\s*(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})\s*$")
 CATEGORY_LETTER = {"morning": "M", "evening": "K", "night": "N"}
@@ -53,6 +54,7 @@ class WorkbookImport(BaseModel):
     shifts_imported: int
     shift_types: int
     staffing: list[StaffingRead]
+    wishes: list[WishSuggestion] = Field(default_factory=list, description="Rules suggested from the wishes column")
     warnings: list[str]
 
 
@@ -417,6 +419,7 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         shifts_imported=len(roster),
         shift_types=len(shift_types),
         staffing=staffing,
+        wishes=suggest_rules(project),
         warnings=warnings,
     )
 
