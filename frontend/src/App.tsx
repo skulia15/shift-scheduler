@@ -43,7 +43,8 @@ export default function App() {
             history: stored.history ?? [],
             ledger: stored.ledger ?? [],
             competence_demand: stored.competence_demand ?? [],
-            staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [], employee_number: s.employee_number ?? null })),
+            staff: stored.staff.map((s) => ({ ...s, competence_ids: s.competence_ids ?? [], employee_number: s.employee_number ?? null, note: s.note ?? '' })),
+            shift_types: stored.shift_types.map((s) => ({ ...s, category: s.category ?? null })),
             tasks: stored.tasks.map((t) => ({ ...t, competence_id: t.competence_id ?? null })),
             rules: { ...defaults.rules, ...stored.rules },
             weights: { ...defaults.weights, ...stored.weights },
@@ -212,6 +213,12 @@ export default function App() {
               setAsOf={setAsOf}
               setProject={setProject}
               onLoadDemo={loadDemo}
+              onReplaceUnit={(p, r) => {
+                setProject(p)
+                setRoster(r)
+                setSolveInfo(null)
+                setChanges(null)
+              }}
               onNextPeriod={startNextPeriod}
             />
           )}

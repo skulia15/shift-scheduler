@@ -1,4 +1,4 @@
-import type { Agreement, Assignment, Evaluation, ImportResult, Project, PublicHoliday, SolveResult } from './types'
+import type { Agreement, Assignment, Evaluation, ImportResult, Project, PublicHoliday, SolveResult, WorkbookImport } from './types'
 
 async function call<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`/api/${path}`, {
@@ -42,6 +42,11 @@ export const api = {
     form.append('file', file)
     form.append('project', JSON.stringify(project))
     return upload<ImportResult>('import/roster', form)
+  },
+  importWorkbook: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return upload<WorkbookImport>(`import/workbook?${q()}`, form)
   },
   exportRoster: async (project: Project, roster: Assignment[]): Promise<Blob> => {
     const res = await fetch('/api/export/roster.xlsx', {

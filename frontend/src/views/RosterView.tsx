@@ -6,9 +6,9 @@ import { AlertIcon, CheckIcon, CloseIcon, DotsIcon, ErrorDot, LockIcon, RefreshI
 import { periodDates, weekday } from '../dates'
 import { useI18n } from '../i18n'
 import { holidayNote } from '../holidayNotes'
-import { shiftColor } from '../shiftColors'
+import { KINDS, shiftColor, shiftKind } from '../shiftColors'
 import { download } from '../store'
-import type { Assignment, Change, CoverageCell, Evaluation, ImportResult, ISODate, LedgerEntry, Project, SolveResult, Violation } from '../types'
+import type { Assignment, Change, CoverageCell, Evaluation, ImportResult, ISODate, LedgerEntry, Project, SolveResult, Violation, WorkbookImport } from '../types'
 import { ShiftDialog } from './ShiftDialog'
 
 interface Props {
@@ -27,6 +27,7 @@ interface Props {
   setProject: (p: Project) => void
   onLoadDemo: () => void
   onNextPeriod: () => void
+  onReplaceUnit: (project: Project, roster: Assignment[]) => void
 }
 
 type Selection = { kind: 'person'; staffId: string; date: ISODate } | { kind: 'cov'; row: string; date: ISODate } | null
@@ -60,6 +61,16 @@ export function RosterView(props: Props) {
   const [moreOpen, setMoreOpen] = useState(false)
   const [importReport, setImportReport] = useState<ImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [workbook, setWorkbook] = useState<WorkbookImport | null>(null)
+  const workbookInput = useRef<HTMLInputElement>(null)
+  const importWorkbook = async (file: File) => {
+    setImportError(null)
+    try {
+      setWorkbook(await api.importWorkbook(file))
+    } catch (e) {
+      setImportError(String((e as Error).message ?? e))
+    }
+  }
   const gridRef = useRef<HTMLDivElement>(null)
   // "Unlock that cell and regenerate": regenerate once the unlocked roster has been saved.
   const [unlockThenRegenerate, setUnlockThenRegenerate] = useState(false)
@@ -382,20 +393,50 @@ export function RosterView(props: Props) {
         {violations.length > 0 && <a href="#problems">{`${i.tn(errors.length, '{n} error', '{n} errors')} · ${i.tn(warnings.length, '{n} warning', '{n} warnings')}`}</a>}
       </div>
 
+      <input
+        ref={workbookInput}
+        type="file"
+        accept=".xlsx,.xlsm"
+        hidden
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          e.target.value = ''
+          if (f) importWorkbook(f)
+        }}
+      />
       {importError && <pre className="error-banner">{importError}</pre>}
+      {workbook && (
+        <WorkbookCard
+          result={workbook}
+          onUse={() => {
+            props.onReplaceUnit(workbook.project, workbook.roster)
+            setWorkbook(null)
+          }}
+          onClose={() => setWorkbook(null)}
+        />
+      )}
       {importReport && <ImportReportCard report={importReport} onClose={() => setImportReport(null)} />}
 
       <div className="roster-layout">
         <section className="roster-main" aria-label={t('Roster grid')}>
           <div className="roster-toolbar no-print">
-            {project.shift_types.map((s, idx) => {
-              const c = shiftColor(idx)
+            {KINDS.map((kind) => {
+              const variants = project.shift_types.filter((s) => shiftKind(s) === kind)
+              if (!variants.length) return null
+              const main = [...variants].sort((x, y) => x.code.length - y.code.length)[0]
+              const c = shiftColor(main)
               return (
-                <span key={s.id} className="legend-shift">
+                <span
+                  key={kind}
+                  className="legend-shift"
+                  title={variants.map((s) => `${s.code}  ${i.timeRange(s.start, s.end)}`).join('\n')}
+                >
                   <span className="badge xs" style={{ background: c.bg, color: c.fg }}>
-                    {s.code}
+                    {main.code}
                   </span>
-                  {s.name} {i.timeRange(s.start, s.end)}
+                  {variants.length === 1
+                    ? `${main.name} ${i.timeRange(main.start, main.end)}`
+                    : `${t({ morning: 'Morning shifts', evening: 'Evening shifts', night: 'Night shifts' }[kind])} · ${i.tn(variants.length, '{n} time', '{n} times')}`}
                 </span>
               )
             })}
@@ -464,6 +505,15 @@ export function RosterView(props: Props) {
                     }}
                   >
                     {t('Start next period →')}
+                  </button>
+                  <button
+                    role="menuitem"
+                    onClick={() => {
+                      setMoreOpen(false)
+                      workbookInput.current?.click()
+                    }}
+                  >
+                    {t('New unit from an Excel workbook…')}
                   </button>
                   <button
                     role="menuitem"
@@ -540,7 +590,7 @@ export function RosterView(props: Props) {
                             {pastDates.map((d, idx) => {
                               const a = past.get(`${s.id}|${d}`)
                               const ti = a ? shiftIndex.get(a.shift_id) : undefined
-                              const color = ti !== undefined ? shiftColor(ti) : null
+                              const color = ti !== undefined ? shiftColor(project.shift_types[ti]) : null
                               return (
                                 <td key={d} className={`slot past ${idx === pastDates.length - 1 ? 'past-edge' : ''}`}>
                                   {a && (
@@ -558,7 +608,7 @@ export function RosterView(props: Props) {
                               const isError = vs.some((v) => v.severity === 'error')
                               const ti = a ? shiftIndex.get(a.shift_id) : undefined
                               const leave = leaveKind.get(key)
-                              const color = ti !== undefined ? shiftColor(ti) : null
+                              const color = ti !== undefined ? shiftColor(project.shift_types[ti]) : null
                               const sub = a
                                 ? [a.area_id && (areaCode.get(a.area_id) ?? a.area_id), ...a.task_ids.map((id) => abbreviate(taskName.get(id) ?? id))].filter(Boolean).join('·')
                                 : ''
@@ -582,7 +632,9 @@ export function RosterView(props: Props) {
                                   >
                                     {a ? (
                                       <>
-                                        <span>{shiftById.get(a.shift_id)?.code ?? a.shift_id}</span>
+                                        <span className={(shiftById.get(a.shift_id)?.code ?? a.shift_id).length > 2 ? 'code-long' : undefined}>
+                                          {shiftById.get(a.shift_id)?.code ?? a.shift_id}
+                                        </span>
                                         {sub && <span className="sub">{sub}</span>}
                                       </>
                                     ) : (
@@ -629,7 +681,7 @@ export function RosterView(props: Props) {
                   </tr>
                 )}
                 {visibleCov.map((r) => {
-                  const c = shiftColor(r.shiftIndex)
+                  const c = shiftColor(project.shift_types[r.shiftIndex])
                   return (
                     <tr key={r.key} className="coverage">
                       <th className="name" title={`${r.code} · ${r.label}`}>
@@ -804,7 +856,7 @@ function SelectionPanel({
     const key = `${sel.staffId}|${sel.date}`
     const a = cell.get(key)
     const info = a ? shiftById.get(a.shift_id) : undefined
-    const color = info ? shiftColor(info.idx) : { bg: '#e6ebe9', fg: '#2d3538' }
+    const color = shiftColor(info?.s)
     const problems = cellViolations.get(key) ?? []
     const leave = leaveKind.get(key)
     const neighbour = (d: ISODate, current: boolean) => {
@@ -868,7 +920,7 @@ function SelectionPanel({
   const x = row?.cells.get(sel.date)
   if (!row || !x) return null
   const shift = project.shift_types.find((s) => s.id === x.shift_id)!
-  const color = shiftColor(row.shiftIndex)
+  const color = shiftColor(project.shift_types[row.shiftIndex])
   const absolute = project.rules.min_rest_hours_absolute * 60
   const len = (s: { start: string; end: string }) => ((clock(s.end) - clock(s.start) + 24 * 60 - 1) % (24 * 60)) + 1
   const restOk = (staffId: string) => {
@@ -1221,4 +1273,90 @@ function dayClass(date: ISODate, holidays: Map<string, unknown>): string {
 
 function abbreviate(name: string): string {
   return name.slice(0, 2)
+}
+
+/** What a planner's workbook became, before it replaces the current unit. */
+function WorkbookCard({ result, onUse, onClose }: { result: WorkbookImport; onUse: () => void; onClose: () => void }) {
+  const i = useI18n()
+  const { t } = i
+  const p = result.project
+  const last = periodDates(p.period.start, p.period.days).at(-1)!
+  const byKind = KINDS.map((k) => ({ k, shifts: p.shift_types.filter((s) => shiftKind(s) === k) })).filter((x) => x.shifts.length)
+  const unsure = result.staffing.filter((s) => !s.certain)
+  return (
+    <section className="card outlined no-print" aria-label={t('New unit from an Excel workbook')}>
+      <div className="card-head">
+        <div>
+          <h2>{t('New unit from “{sheet}”', { sheet: result.sheet })}</h2>
+          <p className="hint">
+            {i.dayMonth(p.period.start)} – {i.dayMonth(last)} {last.slice(0, 4)} · {i.tn(result.people, '{n} person', '{n} people')} ·{' '}
+            {i.tn(result.shifts_imported, '{n} shift', '{n} shifts')} · {i.tn(p.staff.filter((s) => s.note).length, '{n} wish', '{n} wishes')}
+          </p>
+        </div>
+        <button type="button" className="icon-btn close" aria-label={t('Close')} onClick={onClose}>
+          <CloseIcon size={18} />
+        </button>
+      </div>
+      {!result.named && (
+        <div className="alert info">
+          <AlertIcon />
+          <span>{t('The sheet has no names, so everyone got a made-up name. Rename people under Setup.')}</span>
+        </div>
+      )}
+      <div>
+        <b>{i.tn(result.shift_types, '{n} clock time', '{n} clock times')}</b>
+        <div className="row" style={{ marginTop: 6 }}>
+          {byKind.map(({ k, shifts }) => (
+            <span key={k} className="row" style={{ gap: 4 }}>
+              {shifts.map((s) => {
+                const c = shiftColor(s)
+                return (
+                  <span key={s.id} className="chip" style={{ background: c.bg, color: c.fg }} title={s.name}>
+                    {s.code} {i.timeRange(s.start, s.end)}
+                  </span>
+                )
+              })}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div>
+        <b>{t('Staffing read from the count rows')}</b>
+        <p className="hint" style={{ margin: '2px 0 8px' }}>
+          {unsure.length
+            ? i.tn(unsure.length, '{n} needs checking under Demand.', '{n} need checking under Demand.')
+            : t('All read clearly.')}
+        </p>
+        <ul className="list">
+          {result.staffing.map((s, idx) => (
+            <li key={idx}>
+              {s.certain ? <CheckIcon /> : <WarnDot size={16} />}
+              <span className="chip">{s.shift_id ?? '—'}</span>
+              <span style={{ flex: '1 1 260px' }}>“{s.note}”</span>
+              <span className="muted small">{s.detail}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      {result.warnings.length > 0 && (
+        <details>
+          <summary className="muted">{i.tn(result.warnings.length, '{n} note on the import', '{n} notes on the import')}</summary>
+          <ul className="small" style={{ margin: '6px 0 0', paddingLeft: 20 }}>
+            {result.warnings.map((w, idx) => (
+              <li key={idx}>{w}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <div className="row">
+        <button className="btn primary" onClick={onUse}>
+          {t('Use this unit')}
+        </button>
+        <button className="btn" onClick={onClose}>
+          {t('Cancel')}
+        </button>
+        <span className="muted small">{t('Replaces the current unit and roster. Save the current one to a file first if you want to keep it.')}</span>
+      </div>
+    </section>
+  )
 }
