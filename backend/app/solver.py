@@ -167,24 +167,33 @@ class _Model:
 
         # Rest between consecutive shifts.
         shorts: dict[tuple[int, int], list[cp_model.IntVar]] = {}  # (staff, day of the later shift)
+        # A person works at most one shift a day, so for each first shift one constraint covers every
+        # next-day shift that follows it too closely, and one flag per person-day marks a short rest.
         for s in range(S):
             for d in range(D - 1):
+                short: cp_model.IntVar | None = None
                 for t1 in ctx.eligible[s]:
                     a = self.work.get((s, d, t1))
                     if a is None:
                         continue
+                    too_close, close = [], []
                     for t2 in ctx.eligible[s]:
                         b = self.work.get((s, d + 1, t2))
                         if b is None:
                             continue
                         rest = ctx.rest_minutes(d, t1, d + 1, t2)
                         if rest < rules.min_rest_hours_absolute * 60:
-                            m.add_bool_or([a.Not(), b.Not()])
+                            too_close.append(b)
                         elif rest < rules.min_rest_hours * 60:
+                            close.append(b)
+                    if too_close:
+                        m.add(a + sum(too_close) <= 1)
+                    if close:
+                        if short is None:
                             short = m.new_bool_var("")
-                            m.add_bool_or([a.Not(), b.Not(), short])
                             self.penalise(short, w.short_rest * OCCURRENCE)
                             shorts.setdefault((s, d + 1), []).append(short)
+                        m.add(a + sum(close) - 1 <= short)
             # The previous roster's last shift against day 0.
             t1 = ctx.history.get((s, -1))
             if t1 is not None:
@@ -276,6 +285,12 @@ class _Model:
             worst = m.new_int_var(0, D * 24 * 60, "worst_overtime")
             m.add_max_equality(worst, overtimes)
             self.penalise(worst, w.overtime_spread)
+
+        # Nights go to the unit's night workers when it has any marked.
+        if any(st.night_worker for st in ctx.staff) and w.night_outside_pool:
+            for (s, d, t), var in self.work.items():
+                if ctx.shifts[t].kind == "night" and not ctx.staff[s].night_worker:
+                    self.penalise(var, w.night_outside_pool * OCCURRENCE)
 
         if self.repair:
             self._repair_costs()
@@ -370,12 +385,15 @@ class _Model:
                     a = self._lit(s, x - 1, t1)
                     if isinstance(a, int) and a == 0:
                         continue
-                    for t2 in range(T):
-                        b = self._lit(s, x + 1, t2)
-                        if isinstance(b, int) and b == 0:
-                            continue
-                        if ctx.rest_around(x, (x - 1, t1), (x + 1, t2)) < minutes:
-                            m.add_bool_or([r.Not()] + [lit.Not() for lit in (a, b) if not isinstance(lit, int)])
+                    # Day x counts as weekly rest only if no shift pair around it leaves too little rest.
+                    bad = [
+                        b
+                        for t2 in range(T)
+                        if not (isinstance(b := self._lit(s, x + 1, t2), int) and b == 0)
+                        and ctx.rest_around(x, (x - 1, t1), (x + 1, t2)) < minutes
+                    ]
+                    if bad:
+                        m.add(r + a + sum(bad) <= 2)
             rested[x] = r
         for start in range(-H, D - 6):
             if start + 6 >= 0:

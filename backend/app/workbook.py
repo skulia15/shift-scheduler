@@ -302,6 +302,8 @@ def _absences(staff_id: str, row: list[object], fills: list[str | None], cols: l
     return out
 
 
+NIGHT_WORKER_MIN = 3  # nights in the sheet that make someone one of the unit's night workers
+
 # Shift fills in planners' sheets (blue, green, orange): never read as absence.
 KIND_COLOURS = {"94DCF8", "DAF2D0", "F1A983"}
 
@@ -440,7 +442,10 @@ def _import_sheet(sheet: _Sheet, header: tuple[int, list[int], list[date], list[
         note = str(row[wish_col]).strip() if wish_col is not None and wish_col < len(row) and row[wish_col] else ""
         section = sum(1 for d in dividers if d < r)
         groups = [f"{GROUP_ID}{section + 1}", GROUP_ID] if section else [GROUP_ID]
-        staff.append(Staff(id=sid, name=name, group_ids=groups, employment_percent=percent, note=note))
+        # Night workers: whoever the planner gives several nights, or who asks for nights.
+        nights = sum(1 for x in roster if x.staff_id == sid and next(t for t in shift_types if t.id == x.shift_id).kind == "night")
+        night_worker = nights >= NIGHT_WORKER_MIN or bool(re.search(r"\bnv\b|næturv", note.casefold()))
+        staff.append(Staff(id=sid, name=name, group_ids=groups, employment_percent=percent, note=note, night_worker=night_worker))
         leave += _absences(sid, row, fills[r], cols, dates)
 
     # Count rows → staffing rows on the clock time whose daily counts they match.

@@ -78,6 +78,7 @@ class Staff(BaseModel):
     competence_ids: list[str] = Field(default_factory=list, description="e.g. medication rights, Icelandic")
     employee_number: str | None = Field(None, description="Starfsmannanúmer, for matching to MTP / payroll files")
     note: str = Field("", description="The person's wishes, as written (e.g. imported from the planner's sheet)")
+    night_worker: bool = Field(False, description="Works the unit's nights. When anyone is marked, nights for others cost points")
 
 
 class Competence(BaseModel):
@@ -251,6 +252,7 @@ class Weights(BaseModel):
     overstaff: int = 1
     coverage_shortfall: int = 500
     preferred_shortfall: int = 30  # each person below a preferred headcount
+    night_outside_pool: int = 20  # each night shift for someone not marked as a night worker (when anyone is)
     fallback_use: int = 25  # each person on a fallback shift; below preferred_shortfall so it fills preferred gaps only
 
 
