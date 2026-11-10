@@ -18,6 +18,7 @@ from .models import (
     DiverseShiftsRule,
     FixedAreaRule,
     ForbidSequenceRule,
+    LinkedShiftRule,
     MaxShiftTypeRule,
     Project,
     RecurringShiftRule,
@@ -114,15 +115,28 @@ class _Model:
             m.add_at_most_one(vars_)
 
         # Coverage and task headcount.
-        for (d, t, group_id), (lo, hi) in ctx.coverage.items():
-            n = sum(var for (s, dd, tt), var in self.work.items() if dd == d and tt == t and ctx.in_group(s, group_id))
-            self._at_least(n, lo)
+        on_shift: dict[tuple[int, int, str], list] = {}
+        for (s, d, t), var in self.work.items():
+            for g in ctx.staff[s].group_ids:
+                on_shift.setdefault((d, t, g), []).append(var)
+        for key, (lo, hi) in ctx.coverage.items():
+            d, t, group_id = key
+            n = sum(on_shift.get(key, []))
+            # People on a fallback shift that covers this one count towards its headcount.
+            counted = n + sum(sum(on_shift.get((d, tf, group_id), [])) for tf in ctx.covered_by.get(key, []))
+            self._at_least(counted, lo)
             if hi is not None:
                 m.add(n <= hi)
             if lo:
                 over = m.new_int_var(0, S, "")
-                m.add(n - lo <= over)
+                m.add(counted - lo <= over)
                 self.penalise(over, w.overstaff * OCCURRENCE)
+            if key in ctx.preferred:
+                short = m.new_int_var(0, ctx.preferred[key], "")
+                m.add(counted + short >= ctx.preferred[key])
+                self.penalise(short, w.preferred_shortfall * OCCURRENCE)
+            if key in ctx.fallback:
+                self.penalise(n, w.fallback_use * OCCURRENCE)
         for (d, t, task_id), need in ctx.task_need.items():
             n = sum(var for (s, dd, tt, k), var in self.task.items() if dd == d and tt == t and k == task_id)
             self._at_least(n, need)
@@ -471,6 +485,16 @@ class _Model:
                         if x is None or y is None:
                             continue
                         self.soft_le(x + y, 1, rule.hard, rule.weight, 1)
+
+            elif isinstance(rule, LinkedShiftRule):
+                a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]
+                for s in members:
+                    for d in range(D - rule.days_after):
+                        x = self.work.get((s, d, a))
+                        if x is None or ctx.dates[d].weekday() not in rule.weekdays or (s, d + rule.days_after) in ctx.blocked:
+                            continue
+                        y = self.work.get((s, d + rule.days_after, b), 0)
+                        self.soft_le(x - y, 0, rule.hard, rule.weight, 1)
 
             elif isinstance(rule, (WeekendPatternRule, AllowedShiftsRule, RecurringShiftRule, UnavailableWeekdaysRule, ShiftsPerWeekRule, WorkTogetherRule)):
                 self._person_rule(rule)

@@ -49,6 +49,8 @@ IS = {
     "no area": "engu",
     "{label}: {name} has an uneven shift mix ({mix})": "{label}: {name} er með ójafna vaktablöndu ({mix})",
     "{label}: {name} {a} → {b}": "{label}: {name} {a} → {b}",
+    "{group}: {n}, {pref} preferred": "{group}: {n}, æskilegt {pref}",
+    "{label}: {name} works {a} but not {b} after it": "{label}: {name} er á {a} en ekki á {b} á eftir",
     "morning": "MV",
     "evening": "KV",
     "night": "NV",

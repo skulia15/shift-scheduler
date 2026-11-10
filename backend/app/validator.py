@@ -17,6 +17,7 @@ from .models import (
     DiverseShiftsRule,
     FixedAreaRule,
     Evaluation,
+    LinkedShiftRule,
     ForbidSequenceRule,
     MaxShiftTypeRule,
     Project,
@@ -142,11 +143,20 @@ def evaluate(project: Project, roster: list[Assignment], lang: str = "en") -> Ev
 
     # Coverage
     cells: list[CoverageCell] = []
-    for (d, t, group_id), (lo, hi) in sorted(ctx.coverage.items()):
-        n = sum(1 for (s, dd), (tt, _) in work.items() if dd == d and tt == t and ctx.in_group(s, group_id))
-        cells.append(CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, group_id=group_id, required=lo, assigned=n))
-        if n < lo:
-            v("coverage", "error", M("{group}: {n} of {need} required", group=group_name.get(group_id, group_id), n=n, need=lo), d=d, t=t)
+    on_shift: Counter[tuple[int, int, str]] = Counter()
+    for (s, d), (t, _) in work.items():
+        for g in ctx.staff[s].group_ids:
+            on_shift[d, t, g] += 1
+    for key, (lo, hi) in sorted(ctx.coverage.items()):
+        d, t, group_id = key
+        n = on_shift[key]
+        counted = n + sum(on_shift[d, tf, group_id] for tf in ctx.covered_by.get(key, []))
+        pref = ctx.preferred.get(key)
+        cells.append(CoverageCell(date=ctx.dates[d], shift_id=ctx.shifts[t].id, group_id=group_id, required=lo, assigned=counted, preferred=pref))
+        if counted < lo:
+            v("coverage", "error", M("{group}: {n} of {need} required", group=group_name.get(group_id, group_id), n=counted, need=lo), d=d, t=t)
+        elif pref is not None and counted < pref:
+            v("preferred_coverage", "warning", M("{group}: {n}, {pref} preferred", group=group_name.get(group_id, group_id), n=counted, pref=pref), d=d, t=t)
         if hi is not None and n > hi:
             v("coverage", "error", M("{group}: {n}, more than the maximum {max}", group=group_name.get(group_id, group_id), n=n, max=hi), d=d, t=t)
 
@@ -366,6 +376,19 @@ def _custom_rules(
                 if max(counts.values()) - min(counts.values()) > 1:
                     mix = ", ".join(f"{code} {n}" for code, n in counts.items())
                     v(rule.id, severity, M("{label}: {name} has an uneven shift mix ({mix})", label=label, name=ctx.staff[s].name, mix=mix), s)
+
+        elif isinstance(rule, LinkedShiftRule):
+            a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]
+            for s in range(len(ctx.staff)):
+                if rule.group_id and not ctx.in_group(s, rule.group_id):
+                    continue
+                for d, (t, _) in sorted(by_staff[s].items()):
+                    later = d + rule.days_after
+                    if t != a or ctx.dates[d].weekday() not in rule.weekdays or later >= ctx.n_days or (s, later) in ctx.blocked:
+                        continue
+                    nxt = by_staff[s].get(later)
+                    if not nxt or nxt[0] != b:
+                        v(rule.id, severity, M("{label}: {name} works {a} but not {b} after it", label=label, name=ctx.staff[s].name, a=ctx.shifts[a].code, b=ctx.shifts[b].code), s, later)
 
         elif isinstance(rule, ForbidSequenceRule):
             a, b = ctx.shift_index[rule.from_shift_id], ctx.shift_index[rule.to_shift_id]

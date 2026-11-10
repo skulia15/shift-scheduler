@@ -56,6 +56,9 @@ class Context:
     paid: list[int]  # per shift type
     credited: dict[tuple[int, int], int]  # (day, shift) -> paid minutes with band weighting
     coverage: dict[tuple[int, int, str], tuple[int, int | None]] = field(default_factory=dict)
+    preferred: dict[tuple[int, int, str], int] = field(default_factory=dict)  # soft target above the minimum
+    fallback: set[tuple[int, int, str]] = field(default_factory=set)  # (d, t, group) rows used only when short
+    covered_by: dict[tuple[int, int, str], list[int]] = field(default_factory=dict)  # (d, t, group) -> fallback shifts counting for it
     task_need: dict[tuple[int, int, str], int] = field(default_factory=dict)
     blocked: set[tuple[int, int]] = field(default_factory=set)  # (staff, day): holiday or granted request
     request: set[tuple[int, int]] = field(default_factory=set)  # ungranted requests
@@ -205,6 +208,15 @@ def build_context(project: Project) -> Context:
             if is_override:
                 overridden.add(key)
             ctx.coverage[key] = (c.min, c.max)
+            ctx.preferred.pop(key, None)
+            ctx.fallback.discard(key)
+            if c.preferred is not None and c.preferred > c.min:
+                ctx.preferred[key] = c.preferred
+            if c.fallback:
+                ctx.fallback.add(key)
+                if c.covers_shift_id:
+                    target = (d, ctx.shift_index[c.covers_shift_id], c.group_id)
+                    ctx.covered_by.setdefault(target, []).append(t)
 
     overridden_tasks: set[tuple[int, int, str]] = set()
     for td in project.task_demand:

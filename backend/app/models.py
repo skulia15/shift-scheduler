@@ -113,6 +113,9 @@ class CoverageDemand(BaseModel):
     dates: list[date] | None = None
     min: int = 0
     max: int | None = None
+    preferred: int | None = Field(None, description="Soft target above `min` ('helst að hafa 6'); each one short costs points")
+    fallback: bool = Field(False, description="Only used when short ('þarf ekki alltaf'): each person on it costs points")
+    covers_shift_id: str | None = Field(None, description="Fallback only: its people also count towards this shift's headcount")
     note: str = Field("", description="Where the row came from, e.g. the planner's note it was read from")
 
 
@@ -245,6 +248,8 @@ class Weights(BaseModel):
     weekend_excess: int = 10
     overstaff: int = 1
     coverage_shortfall: int = 500
+    preferred_shortfall: int = 30  # each person below a preferred headcount
+    fallback_use: int = 10  # each person on a fallback shift
 
 
 class _RuleBase(BaseModel):
@@ -371,6 +376,18 @@ class WorkTogetherRule(_RuleBase, _ShiftFilter):
     other_staff_id: str
 
 
+class LinkedShiftRule(_RuleBase):
+    """Whoever works `from_shift_id` on one of `weekdays` works `to_shift_id` `days_after` days later
+    ('the one on Saturday's 17:30 gets Sunday 17:00-23:00')."""
+
+    type: Literal["linked_shift"] = "linked_shift"
+    group_id: str | None = None
+    from_shift_id: str
+    weekdays: list[int] = Field(default_factory=lambda: list(range(7)))
+    to_shift_id: str
+    days_after: int = Field(1, ge=1, le=6)
+
+
 CustomRule = Annotated[
     AvoidTaskRepeatRule
     | RotateTaskEvenlyRule
@@ -383,7 +400,8 @@ CustomRule = Annotated[
     | RecurringShiftRule
     | UnavailableWeekdaysRule
     | ShiftsPerWeekRule
-    | WorkTogetherRule,
+    | WorkTogetherRule
+    | LinkedShiftRule,
     Field(discriminator="type"),
 ]
 
@@ -445,7 +463,7 @@ class Project(BaseModel):
             if t.group_id not in group_ids:
                 problems.append(f"task {t.id}: unknown group {t.group_id}")
         for c in self.coverage:
-            if c.shift_id not in shift_ids or c.group_id not in group_ids:
+            if c.shift_id not in shift_ids or c.group_id not in group_ids or (c.covers_shift_id and c.covers_shift_id not in shift_ids):
                 problems.append(f"coverage {c.shift_id}/{c.group_id}: unknown shift or group")
         for td in self.task_demand:
             if td.task_id not in task_ids or td.shift_id not in shift_ids:
@@ -473,6 +491,8 @@ class Project(BaseModel):
             if isinstance(rule, WorkTogetherRule) and rule.other_staff_id not in staff_ids:
                 problems.append(f"rule {rule.id}: unknown staff {rule.other_staff_id}")
             problems += [f"rule {rule.id}: unknown shift {t}" for t in getattr(rule, "shift_ids", None) or [] if t not in shift_ids]
+            if isinstance(rule, LinkedShiftRule) and (rule.from_shift_id not in shift_ids or rule.to_shift_id not in shift_ids):
+                problems.append(f"rule {rule.id}: unknown shift")
             if isinstance(rule, FixedAreaRule) and rule.area_id not in area_ids:
                 problems.append(f"rule {rule.id}: unknown area {rule.area_id}")
         if problems:
@@ -522,6 +542,7 @@ class CoverageCell(BaseModel):
     competence_id: str | None = None
     required: int
     assigned: int
+    preferred: int | None = None
 
 
 class Evaluation(BaseModel):
